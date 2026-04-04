@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createClient, createServiceClient } from '@/lib/supabase/server';
 import {
   logClinicianEdit,
   logVerifiedAnswerInjected,
@@ -26,9 +26,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const supabase = await createClient();
-
-    const { data: { user } } = await supabase.auth.getUser();
+    const authClient = await createClient();
+    const { data: { user } } = await authClient.auth.getUser();
     if (!user) {
       return NextResponse.json(
         { error: 'Unauthorized' },
@@ -37,6 +36,7 @@ export async function POST(request: NextRequest) {
     }
 
     const clinicianId = user.id;
+    const supabase = await createServiceClient();
 
     const { data: userData } = await supabase
       .from('users')

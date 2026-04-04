@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { generateChatResponse, generateTriageSummary } from '@/lib/ai/gemini';
 import { logExperiment } from '@/lib/experiment-logger';
 import { v4 as uuidv4 } from 'uuid';
@@ -16,15 +16,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const supabase = await createClient();
-
-    const { data: { user } } = await supabase.auth.getUser();
+    // Auth check with anon client
+    const authClient = await createClient();
+    const { data: { user } } = await authClient.auth.getUser();
     if (!user || user.id !== userId) {
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }
       );
     }
+
+    // Use service client for all DB operations (bypasses RLS)
+    const supabase = await createServiceClient();
 
     const { data: existingMessages } = await supabase
       .from('messages')

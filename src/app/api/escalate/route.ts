@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { generateTriageSummary, generateClinicianDraft } from '@/lib/ai/gemini';
 import { getRelevantTagsForEscalation } from '@/lib/ai/tag-extractor';
 import { logExperiment, logPatientEdit, logEscalationTriggered } from '@/lib/experiment-logger';
@@ -25,15 +25,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const supabase = await createClient();
-
-    const { data: { user } } = await supabase.auth.getUser();
+    const authClient = await createClient();
+    const { data: { user } } = await authClient.auth.getUser();
     if (!user || user.id !== userId) {
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }
       );
     }
+
+    const supabase = await createServiceClient();
 
     const { data: userData } = await supabase
       .from('users')
@@ -148,20 +149,20 @@ export async function GET(request: NextRequest) {
     const clinicId = searchParams.get('clinicId');
     const status = searchParams.get('status');
 
-    const supabase = await createClient();
-
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
+    const authClient2 = await createClient();
+    const { data: { user: getUser } } = await authClient2.auth.getUser();
+    if (!getUser) {
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }
       );
     }
 
-    const { data: userData } = await supabase
+    const supabaseGet = await createServiceClient();
+    const { data: userData } = await supabaseGet
       .from('users')
       .select('role, clinic_id')
-      .eq('id', user.id)
+      .eq('id', getUser.id)
       .single();
 
     if (userData?.role !== 'clinician' && userData?.role !== 'admin') {
@@ -173,7 +174,7 @@ export async function GET(request: NextRequest) {
 
     const effectiveClinicId = clinicId || userData.clinic_id;
 
-    let query = supabase
+    let query = supabaseGet
       .from('escalations')
       .select(`
         *,
