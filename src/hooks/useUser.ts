@@ -10,23 +10,40 @@ export function useUser() {
   const supabase = createClient();
 
   useEffect(() => {
+    let cancelled = false;
+
     const fetchUser = async () => {
       try {
-        const { data: { user: authUser } } = await supabase.auth.getUser();
+        const { data: { session } } = await supabase.auth.getSession();
 
-        if (authUser) {
-          const { data: userData } = await supabase
-            .from('users')
-            .select('*')
-            .eq('id', authUser.id)
-            .single();
+        if (!session?.user) {
+          if (!cancelled) {
+            setUser(null);
+            setLoading(false);
+          }
+          return;
+        }
 
+        const { data: userData, error } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', session.user.id)
+          .single();
+
+        if (error) {
+          console.error('Error fetching user profile:', error.message);
+        }
+
+        if (!cancelled) {
           setUser(userData);
+          setLoading(false);
         }
       } catch (err) {
         console.error('Error fetching user:', err);
-      } finally {
-        setLoading(false);
+        if (!cancelled) {
+          setUser(null);
+          setLoading(false);
+        }
       }
     };
 
@@ -39,14 +56,17 @@ export function useUser() {
           .select('*')
           .eq('id', session.user.id)
           .single();
-        setUser(userData);
+        if (!cancelled) setUser(userData);
       } else {
-        setUser(null);
+        if (!cancelled) setUser(null);
       }
-      setLoading(false);
+      if (!cancelled) setLoading(false);
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      cancelled = true;
+      subscription.unsubscribe();
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

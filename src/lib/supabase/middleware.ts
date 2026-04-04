@@ -46,15 +46,12 @@ export async function updateSession(request: NextRequest) {
   }
 
   if (user && (path === '/login' || path === '/register')) {
-    // Get user role from database
-    const { data: userData } = await supabase
-      .from('users')
-      .select('role')
-      .eq('id', user.id)
-      .single();
+    // Get user role — use get_my_role() RPC to avoid RLS recursion
+    const { data: roleData } = await supabase
+      .rpc('get_my_role');
 
     const url = request.nextUrl.clone();
-    if (userData?.role === 'clinician') {
+    if (roleData === 'clinician') {
       url.pathname = '/clinic/triage';
     } else {
       url.pathname = '/chat';
@@ -64,13 +61,10 @@ export async function updateSession(request: NextRequest) {
 
   // Role-based route protection
   if (user && path.startsWith('/clinic')) {
-    const { data: userData } = await supabase
-      .from('users')
-      .select('role')
-      .eq('id', user.id)
-      .single();
+    const { data: roleData } = await supabase
+      .rpc('get_my_role');
 
-    if (userData?.role !== 'clinician' && userData?.role !== 'admin') {
+    if (roleData !== 'clinician' && roleData !== 'admin') {
       const url = request.nextUrl.clone();
       url.pathname = '/chat';
       return NextResponse.redirect(url);
