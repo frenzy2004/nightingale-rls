@@ -1,201 +1,151 @@
-# Nightingale Technical Brief
+# Nightingale Patient Messenger — Technical Brief
 
-## Architecture Overview
-
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                           Patient App                                    │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐    │
-│  │  Chat UI    │  │ Memory Tags │  │ Escalation  │  │ Edit Before │    │
-│  │             │  │   Panel     │  │   Prompt    │  │    Send     │    │
-│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘    │
-└─────────┼────────────────┼────────────────┼────────────────┼───────────┘
-          │                │                │                │
-          ▼                ▼                ▼                ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│                         Next.js API Routes                               │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐    │
-│  │  /api/chat  │  │  /api/tags  │  │/api/escalate│  │ /api/reply  │    │
-│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘    │
-└─────────┼────────────────┼────────────────┼────────────────┼───────────┘
-          │                │                │                │
-          ▼                ▼                ▼                ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│                            AI Layer                                      │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐    │
-│  │  Gemini API │  │  Guardrails │  │PHI Redaction│  │Tag Extractor│    │
-│  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘    │
-└─────────────────────────────────────────────────────────────────────────┘
-          │                │                │                │
-          ▼                ▼                ▼                ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│                         Supabase Backend                                 │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐    │
-│  │   Messages  │  │ Memory Tags │  │ Escalations │  │   Clinician │    │
-│  │             │  │             │  │             │  │   Replies   │    │
-│  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘    │
-│                                                                          │
-│  ┌─────────────────────────────────────────────────────────────────┐    │
-│  │                    Row Level Security (RLS)                      │    │
-│  └─────────────────────────────────────────────────────────────────┘    │
-│                                                                          │
-│  ┌─────────────────────────────────────────────────────────────────┐    │
-│  │                      Realtime Subscriptions                      │    │
-│  └─────────────────────────────────────────────────────────────────┘    │
-└─────────────────────────────────────────────────────────────────────────┘
-```
-
-## Schema Design
-
-### Data Flow
+## Architecture Diagram
 
 ```
-Patient Message
-      │
-      ▼
-┌─────────────┐     ┌─────────────┐
-│  messages   │────▶│ memory_tags │
-└─────────────┘     └─────────────┘
-      │                    │
-      │                    ▼
-      │             ┌─────────────┐
-      │             │ (conflicts) │
-      │             └─────────────┘
-      │
-      ▼
-┌─────────────┐     ┌─────────────┐
-│ escalations │────▶│  clinician  │
-└─────────────┘     │   replies   │
-                    └─────────────┘
-                          │
-                          ▼
-                    ┌─────────────┐
-                    │  messages   │
-                    │ (verified)  │
-                    └─────────────┘
+  PATIENT                    AI + MEMORY LAYER                 CLINIC PORTAL
+  ──────                    ─────────────────                 ────────────────
+  
+  ┌──────────────┐          ┌──────────────────┐          ┌──────────────────┐
+  │ Messenger UI │──────▶│  PHI Redaction     │          │  Triage Queue    │
+  │ (WhatsApp-   │        │  ↓                 │          │  (urgency-scored)│
+  │  style chat) │        │  Gemini 2.5 Flash  │          │                  │
+  └──────┬───────┘        │  ↓                 │          │  AI summary +    │
+         │                │  Tag Extraction    │          │  context snapshot│
+         │                │  ↓                 │          └────────┬─────────┘
+  ┌──────▼───────┐        │  Contradiction     │                   │
+  │ Edit + Send  │        │  Detection         │          ┌────────▼─────────┐
+  │ (patient     │        └────────┬───────────┘          │  AI Draft + Edit │
+  │  reviews &   │                 │                      │  (clinician edits│
+  │  edits)      │                 │                      │   signs off,     │
+  └──────┬───────┘                 │                      │   sends)         │
+         │                         │                      └────────┬─────────┘
+         │                ┌────────▼───────────┐                   │
+  ┌──────▼───────┐        │  Memory Store      │          ┌────────▼─────────┐
+  │ Verified     │◀───────│  (tagged, versioned│◀─────────│  Edit Delta Log  │
+  │ Bubble       │        │   contradiction-   │          │  (AI draft vs    │
+  │ (clinician   │        │   aware)           │          │   final diff)    │
+  │  answer)     │        └────────────────────┘          └──────────────────┘
+  └──────────────┘                 │
+                                   │
+                          ┌────────▼───────────┐
+                          │    SUPABASE        │
+                          │  ┌──────────────┐  │
+                          │  │ PostgreSQL   │  │
+                          │  │ Auth + RLS   │  │
+                          │  │ Realtime     │  │
+                          │  └──────────────┘  │
+                          └────────────────────┘
 ```
 
-### Key Tables
+**Request flow**: Patient message → PHI redaction → Gemini generates response → tags extracted → both messages + tags persisted → after N turns, escalation offered → patient edits & sends → clinician sees in triage → edits AI draft → verified reply injected back into patient thread via Realtime.
 
-| Table | Purpose | Key Fields |
-|-------|---------|------------|
-| `users` | User profiles | `role`, `clinic_id` |
-| `messages` | Chat messages | `sender`, `authority` |
-| `memory_tags` | Health context | `status`, `authority`, `source_message_id` |
-| `escalations` | Patient questions | `patient_edited_question`, `context_snapshot` |
-| `clinician_replies` | Provider responses | `ai_draft`, `final_reply`, `diff_log` |
-| `experiment_logs` | Research events | `event_type`, `payload` |
+## Schema: Messages ↔ Memory/Tags ↔ Escalations ↔ Clinician Replies
+
+```
+clinics (1) ──────< users (many)
+                      │
+                      │ user_id
+                      ▼
+                   messages ──────────────────┐
+                      │                        │ source_message_id
+                      │ conversation_id        ▼
+                      │                    memory_tags
+                      │                    (value, tags[], status,
+                      │                     authority, source_message_id,
+                      │                     updated_at)
+                      │
+                      │ patient_id
+                      ▼
+                   escalations ───────< clinician_replies
+                   (patient_edited_     (ai_draft, final_reply,
+                    question,            diff_log, clinician_id,
+                    ai_summary,          message_id → messages)
+                    context_snapshot,
+                    status)
+                                        
+                   experiment_logs (append-only event stream)
+```
+
+| Table | Purpose | Key Relationships |
+|-------|---------|-------------------|
+| `messages` | All chat turns (patient, AI, clinician) | `user_id → users`, `conversation_id` groups a thread |
+| `memory_tags` | Extracted medical facts | `source_message_id → messages`, `user_id → users` |
+| `escalations` | Questions sent to clinic | `patient_id → users`, `clinic_id → clinics`, carries `context_snapshot` (JSONB) |
+| `clinician_replies` | Clinician responses + edit tracking | `escalation_id → escalations`, `message_id → messages` (the injected verified bubble) |
+| `experiment_logs` | Research event stream | `event_type` + `payload` (JSONB), append-only |
 
 ## Assumptions and First-Principles Thinking
 
-### Core Assumption: Trust Through Control
+### Why tagged memory instead of transcript retrieval?
 
-The system is built on the premise that healthcare AI should enhance, not replace, the patient-provider relationship. Every design decision prioritizes:
+The spec identifies the problem: flat transcript retrieval has unbounded token cost and latency. Our solution:
 
-1. **Patient Control**: Patients review and edit before anything leaves their device
-2. **Clinician Authority**: Verified responses override AI-generated content
-3. **Transparency**: Both AI drafts and human edits are preserved
+- Extract **structured tags** from each message in real-time (medications, symptoms, procedures, diagnoses, timelines)
+- Store with **metadata** (status, authority, source pointer, timestamps)
+- Package **only relevant tags** with escalations via keyword matching
 
-### Memory Design Philosophy
+Result: O(1) context retrieval. A 100-message conversation produces the same-sized context payload as a 5-message one.
 
-**Why not flat transcripts?**
-- Token costs grow unboundedly
-- Retrieval latency increases with history
-- Context windows have limits
+### Why both states on contradiction?
 
-**Why structured tags?**
-- O(1) lookup for specific facts
-- Semantic categorization enables smart filtering
-- Status tracking enables contradiction detection
-- Authority levels establish ground truth hierarchy
+Medical facts change — patients start and stop medications. The system must reflect reality, not enforce consistency.
 
-### Contradiction Handling
+When "I take Panadol" is followed by "I stopped last week":
+1. Original tag preserved unchanged (audit trail)
+2. New tag inserted with `status: stopped` and distinct `source_message_id`
+3. Both records exist with their own timestamps
+4. When a clinician replies, their verified facts get `authority: clinician_verified` and conflicting AI tags are set to `status: flagged`
 
-**First Principle**: Medical facts change. Patients start and stop medications. Symptoms appear and resolve. The system must reflect reality, not enforce consistency.
+The clinician's reply is what resolves the contradiction — it carries the highest authority.
 
-**Implementation**:
-- Both states are preserved (audit trail)
-- `source_message_id` enables traceability
-- `updated_at` provides recency
-- `authority` establishes truth hierarchy (clinician > AI)
-- `flagged` status surfaces conflicts for human review
+### Why patient-in-the-loop is mandatory?
 
-### Escalation Design
+Healthcare communication requires informed consent. The patient must see exactly what context is being shared with their clinic before it leaves their device. The Edit Before Send modal is not a nice-to-have — it's the mechanism that makes the escalation trustworthy.
 
-**First Principle**: Patients know when they need human certainty.
+### Why urgency scoring?
 
-**Implementation**:
-- System suggests escalation, patient decides
-- Edit before send ensures patient control
-- Context packaging reduces clinician cognitive load
-- AI draft reduces response time while preserving human judgment
+Clinicians shouldn't manually sort a triage queue. We score dynamically:
+- Flagged (contradicted) tags: **+3 points** each — contradictions need attention
+- Active tags: **+1 point** each — more context = more complex case
+- Hours pending: **+1 point/hour** (max 10) — older unresolved questions float up
 
 ## What We Cut and Why
 
-### Voice AI
-- **Why cut**: Complexity of speech-to-text, speaker diarization, accessibility concerns
-- **Trade-off**: Text-only limits accessibility for some users
-- **Future**: Could add via Whisper API with transcription review
+| Cut | Reason | Impact |
+|-----|--------|--------|
+| **NeMo Guardrails** | Spec listed as a question, not a requirement. Built custom guardrails layer instead (input safety, response validation, emergency detection). NeMo adds deployment complexity with marginal benefit for a prototype. | Low — custom guardrails cover the critical cases |
+| **Voice AI** | Explicitly out of scope per spec | None |
+| **EMR integration** | Explicitly out of scope per spec | None |
+| **Billing** | Explicitly out of scope per spec | None |
+| **Multi-model routing** | Using Gemini 2.5 Flash for all tasks (chat, tags, summaries, drafts). Production would route by cost/quality. | Acceptable — Flash is fast and cheap enough for all tasks |
+| **RAG knowledge base** | The `diff_log` data is being collected (AI draft vs clinician edit), but we don't yet use it to improve future drafts. The infrastructure is in place — accumulation happens, retrieval doesn't. | Foundation built, retrieval is a future iteration |
 
-### Full EMR Integration
-- **Why cut**: FHIR/HL7 complexity, compliance requirements, clinic IT dependencies
-- **Trade-off**: Clinicians must manually reference patient records
-- **Future**: SMART on FHIR apps enable standardized EMR access
+## Security and Access Control
 
-### Billing/Payment
-- **Why cut**: PCI compliance, payment gateway integration, refund handling
-- **Trade-off**: Monetization path unclear
-- **Future**: Stripe integration for subscription or per-escalation billing
+**Server-side enforced via Supabase RLS + API auth checks:**
 
-### NeMo Guardrails (NVIDIA)
-- **Why cut**: Deployment complexity, latency overhead, unclear ROI vs. prompt engineering
-- **Trade-off**: Relying on custom guardrails + Gemini's built-in safety
-- **Future**: Evaluate after measuring jailbreak attempts in production
+- Patient cannot access `/clinic/*` routes (client redirect + API auth)
+- Patient A cannot see Patient B's messages (RLS: `user_id = auth.uid()`)
+- Clinician can only see patients in their own clinic (RLS via `SECURITY DEFINER` helper functions)
+- API routes authenticate via `auth.getUser()`, then use service role for DB operations
+- PHI redaction strips SSNs, phone numbers, emails, DOBs before sending to Gemini
 
-### Provider-Specific Knowledge Base
-- **Why cut**: Requires significant data accumulation, RAG infrastructure
-- **Trade-off**: Each clinician starts fresh
-- **Future**: Use diff_log to train clinic-specific models
+**SECURITY DEFINER pattern**: RLS policies on the `users` table caused infinite recursion (a policy checking the user's role queries the same table). We created `get_my_role()`, `get_my_clinic_id()`, and `get_my_profile()` as PostgreSQL functions with `SECURITY DEFINER` that bypass RLS for self-referential lookups.
 
-## Security Considerations
+## Experiment Logging
 
-### PHI Handling
-- Redaction pipeline strips SSN, DOB, addresses, phone numbers
-- Sanitized payloads in experiment logs
-- No PHI in error logs or console output
+Built in from day one. Every significant event is logged to `experiment_logs`:
 
-### Access Control
-- RLS enforces all policies at database level
-- Middleware provides defense-in-depth for routes
-- No client-side only access checks
+| Event | What's Captured |
+|-------|-----------------|
+| `message_sent` | Every patient, AI, and clinician message (with sender, conversation_id) |
+| `escalation_triggered` | Turn count at escalation, conversation_id |
+| `patient_edit_before_send` | Original question vs. patient-edited version |
+| `clinician_edit_before_send` | AI draft vs. clinician final reply |
+| `ai_clinician_diff` | Structured diff between AI draft and final (for KB building) |
+| `verified_answer_injected` | Clinician reply inserted into patient thread + response turnaround time |
+| `tag_extracted` | Each new memory tag with confidence score |
+| `contradiction_detected` | When conflicting tags are identified |
 
-### Data Isolation
-- Patient A cannot access Patient B (RLS)
-- Clinic A cannot access Clinic B (RLS)
-- Service role only for logging (restricted API routes)
-
-## Performance Considerations
-
-### Realtime Subscriptions
-- Channel per conversation (not global)
-- Unsubscribe on component unmount
-- Debounce rapid updates
-
-### AI Latency
-- Gemini Flash for speed
-- Tag extraction runs async after response
-- Triage summary generated on-demand
-
-### Database
-- Indexes on `user_id`, `conversation_id`, `clinic_id`
-- Pagination for large result sets (not implemented, TODO)
-- Connection pooling via Supabase
-
-## Monitoring Recommendations
-
-1. **Latency**: Track P50/P95 for Gemini API calls
-2. **Escalation Rate**: Monitor % of conversations that escalate
-3. **Clinician Response Time**: Track turnaround from escalation to reply
-4. **Edit Rate**: % of AI drafts modified by clinicians (training signal)
-5. **Contradiction Rate**: Frequency of flagged tags (memory quality signal)
-6. **Safety Events**: Log and review blocked inputs/outputs
+This supports the paper: measuring trust loop effectiveness, AI draft quality (via edit distance), escalation patterns, and clinician response times.

@@ -13,12 +13,24 @@ A healthcare messenger application that enables patients to ask health questions
 - **Verified Responses**: Clinician replies marked as ground truth
 - **Experiment Logging**: Comprehensive event tracking for research
 
+## Live Demo
+
+**URL**: https://nightingale-ten.vercel.app
+
+**Demo Accounts:**
+
+| Role | Email | Password |
+|------|-------|----------|
+| Patient | `demo.patient@nightingale.health` | `NightingaleDemo2025!` |
+| Clinician | `demo.doctor@nightingale.health` | `NightingaleDemo2025!` |
+
 ## Tech Stack
 
-- **Frontend**: Next.js 14 (App Router), TypeScript, Tailwind CSS, shadcn/ui
-- **Backend**: Supabase (Auth, Database, Realtime, RLS)
-- **AI**: Google Gemini API
-- **Testing**: Vitest
+- **Frontend**: Next.js 16.2 (App Router), React 19, TypeScript 5, Tailwind CSS 4, shadcn/ui
+- **Backend**: Supabase (Auth, Database, Realtime, Row Level Security)
+- **AI**: Google Gemini 2.5 Flash
+- **Testing**: Vitest + Testing Library
+- **Deployment**: Vercel
 
 ## Getting Started
 
@@ -32,7 +44,7 @@ A healthcare messenger application that enables patients to ask health questions
 
 1. Clone the repository:
 ```bash
-git clone <repo-url>
+git clone https://github.com/frenzy2004/mini_hacakthon.git
 cd nightingale
 ```
 
@@ -56,8 +68,9 @@ GEMINI_API_KEY=your_gemini_api_key
 
 4. Set up Supabase:
    - Create a new Supabase project
-   - Run the migration in `supabase/migrations/001_initial_schema.sql`
-   - Enable Realtime for the `messages`, `escalations`, and `clinician_replies` tables
+   - Run migrations in order from `supabase/migrations/`
+   - Disable email confirmation: Dashboard > Authentication > Providers > Email
+   - Enable Realtime for `messages`, `escalations`, and `clinician_replies` tables
 
 5. Start the development server:
 ```bash
@@ -179,16 +192,16 @@ src/
 ├── app/
 │   ├── (auth)/           # Login/register pages
 │   ├── (patient)/        # Patient chat
-│   ├── (clinic)/         # Clinician portal
-│   └── api/              # API routes
+│   ├── clinic/           # Clinician portal (triage + reply)
+│   └── api/              # API routes (chat, escalate, reply)
 ├── components/
-│   ├── chat/             # Chat UI components
-│   ├── clinic/           # Clinic UI components
+│   ├── chat/             # ChatBubble, ChatInput, EscalationPrompt, EditBeforeSend, MemoryTagsPanel
+│   ├── clinic/           # TriageCard, ReplyEditor
 │   └── ui/               # shadcn components
-├── hooks/                # React hooks
+├── hooks/                # useUser, useChat
 ├── lib/
-│   ├── ai/               # Gemini, guardrails, PHI redaction
-│   └── supabase/         # Supabase clients
+│   ├── ai/               # Gemini, prompts, guardrails, PHI redaction, tag-extractor
+│   └── supabase/         # Browser client, server client, middleware
 └── types/                # TypeScript types
 ```
 
