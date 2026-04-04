@@ -34,13 +34,9 @@ export default function LoginPage() {
         return;
       }
 
-      const { data: userData } = await supabase
-        .from('users')
-        .select('role')
-        .eq('email', email)
-        .single();
+      const { data: role } = await supabase.rpc('get_my_role');
 
-      if (userData?.role === 'clinician') {
+      if (role === 'clinician') {
         router.push('/clinic/triage');
       } else {
         router.push('/chat');
