@@ -10,7 +10,6 @@ import { EscalationPrompt } from '@/components/chat/EscalationPrompt';
 import { EditBeforeSend } from '@/components/chat/EditBeforeSend';
 import { MemoryTagsPanel } from '@/components/chat/MemoryTagsPanel';
 import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Bird, Menu, LogOut, Tag, X, Loader2 } from 'lucide-react';
 
@@ -102,7 +101,7 @@ export default function ChatPage() {
       <div className="flex-1 flex overflow-hidden">
         {/* Main Chat Area */}
         <div className="flex-1 flex flex-col">
-          <ScrollArea className="flex-1">
+          <div className="flex-1 overflow-y-auto">
             <div className="max-w-3xl mx-auto">
               {initialLoading ? (
                 <div className="flex items-center justify-center h-full py-20">
@@ -158,7 +157,7 @@ export default function ChatPage() {
                 </>
               )}
             </div>
-          </ScrollArea>
+          </div>
 
           {/* Escalation Prompt */}
           {showEscalationPrompt && (
