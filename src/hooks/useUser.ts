@@ -12,6 +12,21 @@ export function useUser() {
   useEffect(() => {
     let cancelled = false;
 
+    const fetchProfile = async (userId: string): Promise<User | null> => {
+      const { data, error } = await supabase.rpc('get_my_profile');
+      if (error) {
+        console.error('Error fetching user profile:', error.message);
+        // Fallback: try direct query
+        const { data: fallback } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', userId)
+          .single();
+        return fallback;
+      }
+      return data;
+    };
+
     const fetchUser = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
@@ -24,18 +39,10 @@ export function useUser() {
           return;
         }
 
-        const { data: userData, error } = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', session.user.id)
-          .single();
-
-        if (error) {
-          console.error('Error fetching user profile:', error.message);
-        }
+        const profile = await fetchProfile(session.user.id);
 
         if (!cancelled) {
-          setUser(userData);
+          setUser(profile);
           setLoading(false);
         }
       } catch (err) {
@@ -51,12 +58,8 @@ export function useUser() {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event: string, session: { user?: { id: string } } | null) => {
       if (session?.user) {
-        const { data: userData } = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', session.user.id)
-          .single();
-        if (!cancelled) setUser(userData);
+        const profile = await fetchProfile(session.user.id);
+        if (!cancelled) setUser(profile);
       } else {
         if (!cancelled) setUser(null);
       }
