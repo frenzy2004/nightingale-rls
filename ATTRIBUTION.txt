@@ -1,0 +1,131 @@
+ATTRIBUTION
+===========
+
+This project uses the following open source libraries and services:
+
+FRONTEND FRAMEWORK
+------------------
+Next.js - MIT License
+https://github.com/vercel/next.js
+Copyright (c) 2024 Vercel, Inc.
+
+React - MIT License
+https://github.com/facebook/react
+Copyright (c) Meta Platforms, Inc. and affiliates.
+
+UI COMPONENTS
+-------------
+shadcn/ui - MIT License
+https://github.com/shadcn-ui/ui
+Copyright (c) 2023 shadcn
+
+Radix UI Primitives - MIT License
+https://github.com/radix-ui/primitives
+Copyright (c) 2022 WorkOS
+
+Lucide Icons - ISC License
+https://github.com/lucide-icons/lucide
+Copyright (c) 2020 Lucide Contributors
+
+STYLING
+-------
+Tailwind CSS - MIT License
+https://github.com/tailwindlabs/tailwindcss
+Copyright (c) Tailwind Labs, Inc.
+
+class-variance-authority - Apache-2.0 License
+https://github.com/joe-bell/cva
+Copyright (c) 2022 Joe Bell
+
+tailwind-merge - MIT License
+https://github.com/dcastil/tailwind-merge
+Copyright (c) 2021 Dany Castillo
+
+clsx - MIT License
+https://github.com/lukeed/clsx
+Copyright (c) Luke Edwards
+
+BACKEND / DATABASE
+------------------
+Supabase - Apache-2.0 License
+https://github.com/supabase/supabase
+Copyright (c) 2020 Supabase Inc.
+
+@supabase/supabase-js - MIT License
+https://github.com/supabase/supabase-js
+Copyright (c) 2020 Supabase
+
+@supabase/ssr - MIT License
+https://github.com/supabase/auth-helpers
+Copyright (c) 2022 Supabase
+
+AI / LLM
+--------
+Google Generative AI SDK - Apache-2.0 License
+https://github.com/google/generative-ai-js
+Copyright (c) 2023 Google LLC
+
+Gemini API
+https://ai.google.dev/
+Subject to Google's Terms of Service
+
+UTILITIES
+---------
+date-fns - MIT License
+https://github.com/date-fns/date-fns
+Copyright (c) 2021 Sasha Koss and Lesha Koss
+
+uuid - MIT License
+https://github.com/uuidjs/uuid
+Copyright (c) 2010-2020 Robert Kieffer and other contributors
+
+diff - BSD-3-Clause License
+https://github.com/kpdecker/jsdiff
+Copyright (c) 2009-2015, Kevin Decker
+
+sonner - MIT License
+https://github.com/emilkowalski/sonner
+Copyright (c) 2023 Emil Kowalski
+
+DEVELOPMENT / TESTING
+---------------------
+TypeScript - Apache-2.0 License
+https://github.com/microsoft/TypeScript
+Copyright (c) Microsoft Corporation
+
+Vitest - MIT License
+https://github.com/vitest-dev/vitest
+Copyright (c) 2021-Present Anthony Fu
+
+Testing Library - MIT License
+https://github.com/testing-library/react-testing-library
+Copyright (c) 2017-Present Kent C. Dodds
+
+ESLint - MIT License
+https://github.com/eslint/eslint
+Copyright OpenJS Foundation and other contributors
+
+FONTS
+-----
+Geist Font - SIL Open Font License 1.1
+https://github.com/vercel/geist-font
+Copyright (c) 2023 Vercel, Inc.
+
+ICONS
+-----
+Lucide - ISC License
+https://lucide.dev/
+Copyright (c) 2020 Lucide Contributors
+
+---
+
+DISCLAIMER
+----------
+This software is provided "as is" without warranty of any kind.
+This is NOT a medical device and should not be used for diagnosis or treatment.
+Always consult qualified healthcare professionals for medical advice.
+
+The AI-generated content in this application is for informational purposes only
+and does not constitute medical advice. The system is designed to facilitate
+communication between patients and healthcare providers, not to replace
+professional medical judgment.
