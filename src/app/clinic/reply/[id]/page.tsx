@@ -23,36 +23,35 @@ export default function ReplyPage({ params }: PageProps) {
   const supabase = createClient();
 
   useEffect(() => {
-    if (!userLoading && !user) {
+    if (userLoading) return;
+    if (!user) {
       router.push('/login');
       return;
     }
-
-    if (user?.role !== 'clinician' && user?.role !== 'admin') {
+    if (user.role !== 'clinician' && user.role !== 'admin') {
       router.push('/chat');
-      return;
     }
   }, [user, userLoading, router]);
 
   useEffect(() => {
     const fetchEscalation = async () => {
-      if (!id) return;
+      if (!id || !user?.clinic_id) return;
 
       try {
-        const { data, error } = await supabase
-          .from('escalations')
-          .select(`
-            *,
-            patient:users!escalations_patient_id_fkey(id, full_name, email)
-          `)
-          .eq('id', id)
-          .single();
+        // Fetch via the triage API which uses service client (bypasses RLS)
+        const response = await fetch(`/api/escalate?clinicId=${user.clinic_id}`);
+        const data = await response.json();
+        const esc = data.escalations?.find((e: Escalation) => e.id === id);
 
-        if (error) throw error;
+        if (!esc) {
+          router.push('/clinic/triage');
+          return;
+        }
 
-        setEscalation(data);
+        setEscalation(esc);
 
-        if (data.status === 'pending') {
+        if (esc.status === 'pending') {
+          // Update status — direct query is fine, clinician has RLS access via helper functions
           await supabase
             .from('escalations')
             .update({ status: 'in_progress' })
@@ -63,8 +62,8 @@ export default function ReplyPage({ params }: PageProps) {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            question: data.patient_edited_question,
-            contextSnapshot: data.context_snapshot,
+            question: esc.patient_edited_question,
+            contextSnapshot: esc.context_snapshot,
           }),
         });
         const draftData = await draftResponse.json();
@@ -78,7 +77,7 @@ export default function ReplyPage({ params }: PageProps) {
     };
 
     fetchEscalation();
-  }, [id, supabase, router]);
+  }, [id, user]);
 
   const handleSendReply = async (reply: string, diffLog: DiffEntry[]) => {
     if (!escalation || !user) return;
