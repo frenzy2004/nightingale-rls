@@ -30,14 +30,13 @@ export default function TriagePage() {
   const supabase = createClient();
 
   useEffect(() => {
-    if (!userLoading && !user) {
+    if (userLoading) return;
+    if (!user) {
       router.push('/login');
       return;
     }
-
-    if (user?.role !== 'clinician' && user?.role !== 'admin') {
+    if (user.role !== 'clinician' && user.role !== 'admin') {
       router.push('/chat');
-      return;
     }
   }, [user, userLoading, router]);
 
