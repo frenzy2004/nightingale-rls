@@ -43,6 +43,9 @@ export default function ChatPage() {
     if (!userLoading && !user) {
       router.push('/login');
     }
+    if (!userLoading && user?.role === 'clinician') {
+      router.push('/clinic/triage');
+    }
   }, [user, userLoading, router]);
 
   const handleEscalationAccept = () => {
