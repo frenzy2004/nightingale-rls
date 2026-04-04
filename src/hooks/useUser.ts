@@ -16,14 +16,10 @@ export function useUser() {
       const { data, error } = await supabase.rpc('get_my_profile');
       if (error) {
         console.error('Error fetching user profile:', error.message);
-        // Fallback: try direct query
-        const { data: fallback } = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', userId)
-          .single();
-        return fallback;
+        return null;
       }
+      // rpc returns array for SETOF — grab first row
+      if (Array.isArray(data)) return data[0] || null;
       return data;
     };
 
