@@ -7,6 +7,7 @@ import {
   ArrowLeft,
   ClipboardList,
   Clock,
+  Loader2,
   RefreshCw,
   Send,
   Sparkles,
@@ -21,17 +22,14 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
 import { DEMO_PROVIDER, getClinicEscalationLabel } from '@/lib/demo';
-import type {
-  DiffEntry,
-  Escalation,
-  MemoryTag,
-  PatientProfile,
-} from '@/types';
+import type { DiffEntry, Escalation, MemoryTag, PatientProfile } from '@/types';
 
 interface ReplyEditorProps {
   escalation: Escalation & { patient?: { full_name: string; email: string } };
   aiDraft: string;
   patientProfile?: PatientProfile | null;
+  onRegenerateDraft: () => void;
+  draftLoading?: boolean;
   onSend: (reply: string, diffLog: DiffEntry[]) => void;
   onBack: () => void;
   loading?: boolean;
@@ -41,6 +39,8 @@ export function ReplyEditor({
   escalation,
   aiDraft,
   patientProfile,
+  onRegenerateDraft,
+  draftLoading,
   onSend,
   onBack,
   loading,
@@ -200,10 +200,21 @@ export function ReplyEditor({
                 placeholder="Write your response..."
               />
               <div className="absolute bottom-2 right-2">
-                <Badge variant="outline" className="text-xs">
-                  <Sparkles className="mr-1 h-3 w-3" />
-                  AI Draft
-                </Badge>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="xs"
+                  className="border-slate-200 bg-white/95 text-xs shadow-sm"
+                  onClick={onRegenerateDraft}
+                  disabled={draftLoading}
+                >
+                  {draftLoading ? (
+                    <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                  ) : (
+                    <Sparkles className="mr-1 h-3 w-3" />
+                  )}
+                  {draftLoading ? 'Refreshing...' : 'AI Draft'}
+                </Button>
               </div>
             </div>
 

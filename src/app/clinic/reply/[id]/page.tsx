@@ -12,6 +12,24 @@ interface PageProps {
   params: Promise<{ id: string }>;
 }
 
+async function requestDraft(question: string, contextSnapshot: unknown) {
+  const response = await fetch('/api/reply/draft', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      question,
+      contextSnapshot,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to generate draft');
+  }
+
+  const data = await response.json();
+  return data.draft || '';
+}
+
 export default function ReplyPage({ params }: PageProps) {
   const { id } = use(params);
   const { user, loading: userLoading } = useUser();
@@ -21,6 +39,7 @@ export default function ReplyPage({ params }: PageProps) {
   const [aiDraft, setAiDraft] = useState('');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [draftLoading, setDraftLoading] = useState(false);
 
   useEffect(() => {
     if (userLoading) {
@@ -54,28 +73,18 @@ export default function ReplyPage({ params }: PageProps) {
         }
 
         setEscalation(esc);
+        setDraftLoading(true);
 
-        const [draftResponse, patientResponse] = await Promise.all([
-          fetch('/api/reply/draft', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              question: esc.patient_edited_question,
-              contextSnapshot: esc.context_snapshot,
-            }),
-          }),
+        const [draft, patientResponse] = await Promise.all([
+          requestDraft(esc.patient_edited_question, esc.context_snapshot),
           fetch(`/api/patients/${esc.patient_id}`),
         ]);
 
         if (esc.status === 'pending') {
-          await createClient()
-            .from('escalations')
-            .update({ status: 'in_progress' })
-            .eq('id', id);
+          await createClient().from('escalations').update({ status: 'in_progress' }).eq('id', id);
         }
 
-        const draftData = await draftResponse.json();
-        setAiDraft(draftData.draft || '');
+        setAiDraft(draft);
 
         if (patientResponse.ok) {
           const patientData = await patientResponse.json();
@@ -85,12 +94,32 @@ export default function ReplyPage({ params }: PageProps) {
         console.error('Error fetching escalation:', error);
         router.push('/clinic/triage');
       } finally {
+        setDraftLoading(false);
         setLoading(false);
       }
     };
 
     fetchEscalation();
   }, [id, router, user]);
+
+  const handleRegenerateDraft = async () => {
+    if (!escalation) {
+      return;
+    }
+
+    setDraftLoading(true);
+    try {
+      const draft = await requestDraft(
+        escalation.patient_edited_question,
+        escalation.context_snapshot
+      );
+      setAiDraft(draft);
+    } catch (error) {
+      console.error('Error regenerating draft:', error);
+    } finally {
+      setDraftLoading(false);
+    }
+  };
 
   const handleSendReply = async (reply: string, diffLog: DiffEntry[]) => {
     if (!escalation || !user) {
@@ -136,6 +165,8 @@ export default function ReplyPage({ params }: PageProps) {
         escalation={escalation as Escalation & { patient?: { full_name: string; email: string } }}
         aiDraft={aiDraft}
         patientProfile={patientProfile}
+        onRegenerateDraft={handleRegenerateDraft}
+        draftLoading={draftLoading}
         onSend={handleSendReply}
         onBack={() => router.push('/clinic/triage')}
         loading={sending}
