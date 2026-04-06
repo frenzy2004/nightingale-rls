@@ -77,14 +77,20 @@ Include:
 
 Keep it clinical, readable, and ready for triage queue display.`;
 
+export const CLINICIAN_DRAFT_OPENING =
+  "Thanks for checking in. Based on what you've shared, I would like our team to review this and confirm the safest next step.";
+
 export const CLINICIAN_DRAFT_PROMPT = `Based on this patient question and context, draft a short response that a clinician at ${DEMO_PROVIDER.hospitalName} might send.
 
 Guidelines:
+- Start with this exact sentence: "${CLINICIAN_DRAFT_OPENING}"
+- After that opener, add 1 or 2 short sentences that attempt to answer the patient's question in a useful way
 - Be professional, direct, and calm
 - Address the specific question
 - Include safe next-step guidance
 - Keep it concise (3 sentences max)
 - Mention urgent review only if the context actually sounds higher risk
+- Avoid vague placeholders like "noted context" unless you add a concrete next step
 - The clinician will edit this before sending
 
 Remember: This is a draft that will be reviewed and edited by the actual clinician.`;

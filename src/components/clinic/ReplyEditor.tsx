@@ -1,30 +1,37 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { diffWords } from 'diff';
-import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
-import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Separator } from '@/components/ui/separator';
+import { format } from 'date-fns';
 import {
+  ArrowLeft,
+  ClipboardList,
+  Clock,
+  RefreshCw,
   Send,
   Sparkles,
   User,
-  Tag,
-  Clock,
-  ArrowLeft,
-  RefreshCw,
 } from 'lucide-react';
-import type { Escalation, MemoryTag, DiffEntry } from '@/types';
-import { format } from 'date-fns';
+import { MemoryTagsPanel } from '@/components/chat/MemoryTagsPanel';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Label } from '@/components/ui/label';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Separator } from '@/components/ui/separator';
+import { Textarea } from '@/components/ui/textarea';
 import { DEMO_PROVIDER, getClinicEscalationLabel } from '@/lib/demo';
+import type {
+  DiffEntry,
+  Escalation,
+  MemoryTag,
+  PatientProfile,
+} from '@/types';
 
 interface ReplyEditorProps {
   escalation: Escalation & { patient?: { full_name: string; email: string } };
   aiDraft: string;
+  patientProfile?: PatientProfile | null;
   onSend: (reply: string, diffLog: DiffEntry[]) => void;
   onBack: () => void;
   loading?: boolean;
@@ -33,6 +40,7 @@ interface ReplyEditorProps {
 export function ReplyEditor({
   escalation,
   aiDraft,
+  patientProfile,
   onSend,
   onBack,
   loading,
@@ -47,15 +55,14 @@ export function ReplyEditor({
 
   const getDiffLog = (): DiffEntry[] => {
     const diff = diffWords(aiDraft, reply);
-    return diff.map(part => ({
+    return diff.map((part) => ({
       type: part.added ? 'added' : part.removed ? 'removed' : 'unchanged',
       value: part.value,
     }));
   };
 
   const handleSend = () => {
-    const diffLog = getDiffLog();
-    onSend(reply, diffLog);
+    onSend(reply, getDiffLog());
   };
 
   const handleReset = () => {
@@ -63,10 +70,11 @@ export function ReplyEditor({
   };
 
   const hasEdits = reply !== aiDraft;
+  const hasContext = contextTags.length > 0 || Boolean(patientProfile);
 
   return (
-    <div className="h-full flex flex-col">
-      <div className="flex items-center gap-4 p-4 border-b">
+    <div className="flex h-full flex-col">
+      <div className="flex items-center gap-4 border-b p-4">
         <Button variant="ghost" size="icon" onClick={onBack}>
           <ArrowLeft className="h-5 w-5" />
         </Button>
@@ -76,26 +84,23 @@ export function ReplyEditor({
             {escalation.patient?.full_name || 'Patient'} · {DEMO_PROVIDER.hospitalName}
           </p>
         </div>
-        <Badge variant="secondary">
-          {getClinicEscalationLabel(escalation.status)}
-        </Badge>
+        <Badge variant="secondary">{getClinicEscalationLabel(escalation.status)}</Badge>
       </div>
 
       <ScrollArea className="flex-1">
-        <div className="p-4 space-y-4">
-          {/* Patient Info */}
+        <div className="space-y-4 p-4">
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm flex items-center gap-2">
+              <CardTitle className="flex items-center gap-2 text-sm">
                 <User className="h-4 w-4" />
                 Patient Question
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               <p className="text-sm">{escalation.patient_edited_question}</p>
-              
+
               {escalation.original_question !== escalation.patient_edited_question && (
-                <div className="p-2 bg-muted rounded text-xs">
+                <div className="rounded bg-muted p-2 text-xs">
                   <span className="text-muted-foreground">Original: </span>
                   {escalation.original_question}
                 </div>
@@ -108,57 +113,41 @@ export function ReplyEditor({
             </CardContent>
           </Card>
 
-          {/* AI Summary */}
           {escalation.ai_summary && (
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm flex items-center gap-2">
+                <CardTitle className="flex items-center gap-2 text-sm">
                   <Sparkles className="h-4 w-4" />
                   AI Summary
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-sm text-muted-foreground">
-                  {escalation.ai_summary}
-                </p>
+                <p className="text-sm text-muted-foreground">{escalation.ai_summary}</p>
               </CardContent>
             </Card>
           )}
 
-          {/* Context Tags */}
-          {contextTags.length > 0 && (
+          {hasContext && (
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm flex items-center gap-2">
-                  <Tag className="h-4 w-4" />
+                <CardTitle className="flex items-center gap-2 text-sm">
+                  <ClipboardList className="h-4 w-4" />
                   Patient Context
                 </CardTitle>
               </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  {contextTags.map((tag, i) => (
-                    <div
-                      key={i}
-                      className="flex items-start justify-between p-2 bg-muted/50 rounded"
-                    >
-                      <div>
-                        <p className="text-sm">{tag.value}</p>
-                        <div className="flex gap-1 mt-1">
-                          {tag.tags.map((t, j) => (
-                            <Badge key={j} variant="outline" className="text-xs">
-                              {t}
-                            </Badge>
-                          ))}
-                        </div>
-                      </div>
-                      <Badge
-                        variant={tag.status === 'active' ? 'default' : 'secondary'}
-                        className="text-xs"
-                      >
-                        {tag.status}
-                      </Badge>
-                    </div>
-                  ))}
+              <CardContent className="space-y-3">
+                <p className="text-xs leading-5 text-muted-foreground">
+                  Organized into EMR-style chart sections so you can scan the recent memory and
+                  profile context more quickly.
+                </p>
+                <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-slate-50/40">
+                  <MemoryTagsPanel
+                    tags={contextTags}
+                    profile={patientProfile}
+                    showPanelChrome={false}
+                    showEmptySections
+                    className="max-h-[36rem]"
+                  />
                 </div>
               </CardContent>
             </Card>
@@ -166,27 +155,18 @@ export function ReplyEditor({
 
           <Separator />
 
-          {/* Reply Editor */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <Label>Your Reply</Label>
               <div className="flex gap-2">
                 {hasEdits && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setShowDiff(!showDiff)}
-                  >
+                  <Button variant="ghost" size="sm" onClick={() => setShowDiff(!showDiff)}>
                     {showDiff ? 'Hide Changes' : 'Show Changes'}
                   </Button>
                 )}
                 {hasEdits && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleReset}
-                  >
-                    <RefreshCw className="h-3 w-3 mr-1" />
+                  <Button variant="ghost" size="sm" onClick={handleReset}>
+                    <RefreshCw className="mr-1 h-3 w-3" />
                     Reset
                   </Button>
                 )}
@@ -194,16 +174,16 @@ export function ReplyEditor({
             </div>
 
             {showDiff && hasEdits && (
-              <div className="p-3 bg-muted rounded-lg text-sm font-mono">
-                {getDiffLog().map((part, i) => (
+              <div className="rounded-lg bg-muted p-3 font-mono text-sm">
+                {getDiffLog().map((part, index) => (
                   <span
-                    key={i}
+                    key={index}
                     className={
                       part.type === 'added'
                         ? 'bg-green-200 dark:bg-green-900'
                         : part.type === 'removed'
-                        ? 'bg-red-200 dark:bg-red-900 line-through'
-                        : ''
+                          ? 'bg-red-200 dark:bg-red-900 line-through'
+                          : ''
                     }
                   >
                     {part.value}
@@ -215,32 +195,29 @@ export function ReplyEditor({
             <div className="relative">
               <Textarea
                 value={reply}
-                onChange={(e) => setReply(e.target.value)}
-                className="min-h-[150px]"
+                onChange={(event) => setReply(event.target.value)}
+                className="min-h-[170px]"
                 placeholder="Write your response..."
               />
               <div className="absolute bottom-2 right-2">
                 <Badge variant="outline" className="text-xs">
-                  <Sparkles className="h-3 w-3 mr-1" />
+                  <Sparkles className="mr-1 h-3 w-3" />
                   AI Draft
                 </Badge>
               </div>
             </div>
 
             <p className="text-xs text-muted-foreground">
-              Edit the AI-generated draft before sending. The verified response will appear back in the patient messenger with your provider details attached.
+              Edit the AI-generated draft before sending. The verified response will appear back in
+              the patient messenger with your provider details attached.
             </p>
           </div>
         </div>
       </ScrollArea>
 
-      <div className="p-4 border-t">
-        <Button
-          onClick={handleSend}
-          className="w-full"
-          disabled={loading || !reply.trim()}
-        >
-          <Send className="h-4 w-4 mr-2" />
+      <div className="border-t p-4">
+        <Button onClick={handleSend} className="w-full" disabled={loading || !reply.trim()}>
+          <Send className="mr-2 h-4 w-4" />
           Send Verified Response
         </Button>
       </div>

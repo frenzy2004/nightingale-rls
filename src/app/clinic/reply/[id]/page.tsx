@@ -1,12 +1,12 @@
 'use client';
 
-import { useState, useEffect, use } from 'react';
+import { use, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { Loader2 } from 'lucide-react';
+import { ReplyEditor } from '@/components/clinic/ReplyEditor';
 import { useUser } from '@/hooks/useUser';
 import { createClient } from '@/lib/supabase/client';
-import { ReplyEditor } from '@/components/clinic/ReplyEditor';
-import { Loader2 } from 'lucide-react';
-import type { Escalation, DiffEntry } from '@/types';
+import type { DiffEntry, Escalation, PatientProfile } from '@/types';
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -17,17 +17,21 @@ export default function ReplyPage({ params }: PageProps) {
   const { user, loading: userLoading } = useUser();
   const router = useRouter();
   const [escalation, setEscalation] = useState<Escalation | null>(null);
+  const [patientProfile, setPatientProfile] = useState<PatientProfile | null>(null);
   const [aiDraft, setAiDraft] = useState('');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
-  const supabase = createClient();
 
   useEffect(() => {
-    if (userLoading) return;
+    if (userLoading) {
+      return;
+    }
+
     if (!user) {
       router.push('/login');
       return;
     }
+
     if (user.role !== 'clinician' && user.role !== 'admin') {
       router.push('/chat');
     }
@@ -35,13 +39,14 @@ export default function ReplyPage({ params }: PageProps) {
 
   useEffect(() => {
     const fetchEscalation = async () => {
-      if (!id || !user?.clinic_id) return;
+      if (!id || !user?.clinic_id) {
+        return;
+      }
 
       try {
-        // Fetch via the triage API which uses service client (bypasses RLS)
         const response = await fetch(`/api/escalate?clinicId=${user.clinic_id}`);
         const data = await response.json();
-        const esc = data.escalations?.find((e: Escalation) => e.id === id);
+        const esc = data.escalations?.find((candidate: Escalation) => candidate.id === id);
 
         if (!esc) {
           router.push('/clinic/triage');
@@ -50,24 +55,32 @@ export default function ReplyPage({ params }: PageProps) {
 
         setEscalation(esc);
 
+        const [draftResponse, patientResponse] = await Promise.all([
+          fetch('/api/reply/draft', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              question: esc.patient_edited_question,
+              contextSnapshot: esc.context_snapshot,
+            }),
+          }),
+          fetch(`/api/patients/${esc.patient_id}`),
+        ]);
+
         if (esc.status === 'pending') {
-          // Update status — direct query is fine, clinician has RLS access via helper functions
-          await supabase
+          await createClient()
             .from('escalations')
             .update({ status: 'in_progress' })
             .eq('id', id);
         }
 
-        const draftResponse = await fetch('/api/reply/draft', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            question: esc.patient_edited_question,
-            contextSnapshot: esc.context_snapshot,
-          }),
-        });
         const draftData = await draftResponse.json();
         setAiDraft(draftData.draft || '');
+
+        if (patientResponse.ok) {
+          const patientData = await patientResponse.json();
+          setPatientProfile((patientData.profile || null) as PatientProfile | null);
+        }
       } catch (error) {
         console.error('Error fetching escalation:', error);
         router.push('/clinic/triage');
@@ -77,10 +90,12 @@ export default function ReplyPage({ params }: PageProps) {
     };
 
     fetchEscalation();
-  }, [id, user]);
+  }, [id, router, user]);
 
   const handleSendReply = async (reply: string, diffLog: DiffEntry[]) => {
-    if (!escalation || !user) return;
+    if (!escalation || !user) {
+      return;
+    }
 
     setSending(true);
     try {
@@ -107,13 +122,9 @@ export default function ReplyPage({ params }: PageProps) {
     }
   };
 
-  const handleBack = () => {
-    router.push('/clinic/triage');
-  };
-
   if (userLoading || loading || !escalation) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="flex min-h-screen items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
@@ -124,8 +135,9 @@ export default function ReplyPage({ params }: PageProps) {
       <ReplyEditor
         escalation={escalation as Escalation & { patient?: { full_name: string; email: string } }}
         aiDraft={aiDraft}
+        patientProfile={patientProfile}
         onSend={handleSendReply}
-        onBack={handleBack}
+        onBack={() => router.push('/clinic/triage')}
         loading={sending}
       />
     </div>

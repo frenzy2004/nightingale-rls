@@ -10,6 +10,7 @@ import type {
   EscalationPayload,
   MemoryTag,
   Message,
+  PatientProfile,
   QuickActionOption,
   RiskAssessment,
 } from '@/types';
@@ -50,6 +51,7 @@ export function useChat({ userId, conversationId: initialConversationId, clinicI
   const [pendingEscalation, setPendingEscalation] = useState<EscalationPayload | null>(null);
   const [riskAssessment, setRiskAssessment] = useState<RiskAssessment | null>(null);
   const [careStatus, setCareStatus] = useState<Escalation | null>(null);
+  const [patientProfile, setPatientProfile] = useState<PatientProfile | null>(null);
 
   const supabase = createClient();
 
@@ -75,7 +77,7 @@ export function useChat({ userId, conversationId: initialConversationId, clinicI
 
       setConversationId(activeConversationId);
 
-      const [messagesResult, tagsResult, escalationResult] = await Promise.all([
+      const [messagesResult, tagsResult, escalationResult, profileResult] = await Promise.all([
         supabase
           .from('messages')
           .select('*')
@@ -93,6 +95,11 @@ export function useChat({ userId, conversationId: initialConversationId, clinicI
           .eq('conversation_id', activeConversationId)
           .order('created_at', { ascending: false })
           .limit(1),
+        supabase
+          .from('patient_profiles')
+          .select('*')
+          .eq('user_id', userId)
+          .maybeSingle(),
       ]);
 
       if (messagesResult.data) {
@@ -118,6 +125,9 @@ export function useChat({ userId, conversationId: initialConversationId, clinicI
       }
       if (escalationResult.data?.[0]) {
         setCareStatus(escalationResult.data[0] as Escalation);
+      }
+      if (profileResult.data) {
+        setPatientProfile(profileResult.data as PatientProfile);
       }
 
       setInitialLoading(false);
@@ -385,6 +395,7 @@ export function useChat({ userId, conversationId: initialConversationId, clinicI
     pendingEscalation,
     riskAssessment,
     careStatus,
+    patientProfile,
     sendMessage,
     sendVoiceMessage,
     sendImageMessage,

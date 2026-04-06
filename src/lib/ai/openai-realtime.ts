@@ -1,6 +1,7 @@
 import {
   SYSTEM_PROMPT,
   buildContextPrompt,
+  CLINICIAN_DRAFT_OPENING,
   CLINICIAN_DRAFT_PROMPT,
   TAG_EXTRACTION_PROMPT,
   TRIAGE_SUMMARY_PROMPT,
@@ -182,13 +183,96 @@ function buildDeterministicClinicianDraft(
   question: string,
   contextSnapshot: MemoryTag[]
 ): string {
-  const contextLine = contextSnapshot[0]?.value
-    ? ` Noted context: ${contextSnapshot[0].value}.`
-    : '';
+  return ensureClinicianDraftStructure('', question, contextSnapshot);
+}
 
-  return validateResponse(
-    `Thanks for checking in. Based on what you've shared, I would like our team to review this and confirm the safest next step.${contextLine}`
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function trimToSentenceCount(text: string, maxSentences: number): string {
+  const sentences =
+    text
+      .match(/[^.!?]+[.!?]?/g)
+      ?.map((sentence) => sentence.trim())
+      .filter(Boolean) || [];
+
+  return sentences.slice(0, maxSentences).join(' ').trim();
+}
+
+function buildClinicianAttemptedResponse(
+  question: string,
+  contextSnapshot: MemoryTag[]
+): string {
+  const normalizedQuestion = question.toLowerCase();
+  const primaryContext = contextSnapshot[0]?.value?.toLowerCase() || '';
+
+  if (/\bdrive|driving\b/i.test(normalizedQuestion)) {
+    return 'Please avoid driving until the symptom has settled, especially if you feel unsteady, drowsy, or unwell.';
+  }
+
+  if (/\bheadache|migraine\b/i.test(normalizedQuestion) || /\bheadache|migraine\b/i.test(primaryContext)) {
+    return 'Please arrange review this week if the headaches keep recurring, and seek urgent help sooner if you develop vomiting, weakness, or vision changes.';
+  }
+
+  if (/\bbiopsy|procedure\b/i.test(normalizedQuestion) || /\bbiopsy|procedure\b/i.test(primaryContext)) {
+    return 'Please keep following the procedure instructions you were given, and let us know before the appointment if you are unsure about medicines, fasting, or new bleeding.';
+  }
+
+  if (/\bpanadol|paracetamol|acetaminophen|medication|medicine|tablet\b/i.test(normalizedQuestion)) {
+    return 'Please avoid changing your medicines on your own for now, and send us the exact medication and timing if you want the team to confirm the safest plan.';
+  }
+
+  if (/\bnausea|vomit\b/i.test(normalizedQuestion) || /\bnausea|vomit\b/i.test(primaryContext)) {
+    return 'Please note when the nausea starts relative to your tablets, and let us know the same day if you cannot keep fluids down or it lasts most of the day.';
+  }
+
+  if (/\bfever|temperature\b/i.test(normalizedQuestion)) {
+    return 'Please monitor your temperature, drink fluids, and arrange same-day review if the fever is high, persistent, or comes with breathlessness, confusion, or dehydration.';
+  }
+
+  if (/\bbreath|breathless|shortness of breath\b/i.test(normalizedQuestion) || /\bbreath|breathless\b/i.test(primaryContext)) {
+    return 'Please let the team know the same day if the breathlessness is worsening or limiting simple activity, especially after treatment.';
+  }
+
+  if (/\blump|swelling\b/i.test(normalizedQuestion) || /\blump|swelling\b/i.test(primaryContext)) {
+    return 'We would usually want to examine a new lump soon, so please let us know if it is growing quickly, painful, or causing trouble swallowing or breathing.';
+  }
+
+  if (/\bappointment|review|book\b/i.test(normalizedQuestion)) {
+    return 'We can help arrange the soonest suitable review, and the team can confirm the exact timing once they see the full context.';
+  }
+
+  if (primaryContext) {
+    return `From the context so far, please keep monitoring ${primaryContext} and let us know if it is worsening, not settling, or affecting daily activity.`;
+  }
+
+  return 'Please keep monitoring the symptom and let us know if it is worsening, not settling, or creating any new safety concern.';
+}
+
+function ensureClinicianDraftStructure(
+  draft: string,
+  question: string,
+  contextSnapshot: MemoryTag[]
+): string {
+  const cleanedDraft = trimToSentenceCount(
+    draft
+      .replace(new RegExp(`^${escapeRegExp(CLINICIAN_DRAFT_OPENING)}\\s*`, 'i'), '')
+      .trim(),
+    2
   );
+  const attemptedResponse = buildClinicianAttemptedResponse(question, contextSnapshot);
+  const soundsActionable =
+    /\b(please|avoid|arrange|monitor|track|keep|drink|rest|review|come|go|seek|book|send|let us know|follow)\b/i.test(
+      cleanedDraft
+    );
+  const body = cleanedDraft
+    ? soundsActionable
+      ? cleanedDraft
+      : `${cleanedDraft} ${attemptedResponse}`.trim()
+    : attemptedResponse;
+
+  return validateResponse(`${CLINICIAN_DRAFT_OPENING} ${body}`);
 }
 
 function buildRealtimeUrl(endpoint: string): string {
@@ -929,7 +1013,7 @@ export async function generateClinicianDraft(
       maxOutputTokens: 220,
     });
 
-    return validateResponse(realtimeResponse.text);
+    return ensureClinicianDraftStructure(realtimeResponse.text, question, contextSnapshot);
   } catch (error) {
     console.error('Realtime clinician draft error:', error);
     return buildDeterministicClinicianDraft(question, contextSnapshot);

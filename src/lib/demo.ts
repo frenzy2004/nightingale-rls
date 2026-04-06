@@ -38,12 +38,12 @@ export const PROVIDER_QUICK_ACTIONS: QuickActionOption[] = [
 export const DEFAULT_APPOINTMENT_OPTIONS: AppointmentOption[] = [
   {
     id: 'slot-1',
-    label: 'Tue, 9 Apr · 10:00 AM',
+    label: 'Tue, 9 Apr - 10:00 AM',
     datetime: '2026-04-09T10:00:00+08:00',
   },
   {
     id: 'slot-2',
-    label: 'Wed, 10 Apr · 2:30 PM',
+    label: 'Wed, 10 Apr - 2:30 PM',
     datetime: '2026-04-10T14:30:00+08:00',
   },
 ];
@@ -116,8 +116,7 @@ export function buildProviderMessageMetadata(
     disclaimer: metadata?.disclaimer || PROVIDER_MESSAGE_DISCLAIMER,
     quickActions: metadata?.quickActions || PROVIDER_QUICK_ACTIONS,
     appointmentOptions:
-      metadata?.appointmentOptions ||
-      (DEMO_MODE ? DEFAULT_APPOINTMENT_OPTIONS : undefined),
+      metadata?.appointmentOptions || (DEMO_MODE ? DEFAULT_APPOINTMENT_OPTIONS : undefined),
     ...metadata,
   };
 }

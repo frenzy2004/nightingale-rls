@@ -30,6 +30,7 @@ export default function ChatPage() {
   const {
     messages,
     memoryTags,
+    patientProfile,
     loading,
     initialLoading,
     showEscalationPrompt,
@@ -209,7 +210,7 @@ export default function ChatPage() {
         <aside
           className={`
             ${showSidebar ? 'translate-x-0' : 'translate-x-full md:translate-x-0'}
-            fixed md:relative right-0 top-0 h-full w-80 bg-card border-l
+            fixed md:relative right-0 top-0 h-full w-[24rem] bg-card border-l
             transition-transform duration-300 ease-in-out z-40
             md:block
             ${showSidebar ? 'block' : 'hidden md:block'}
@@ -217,13 +218,13 @@ export default function ChatPage() {
         >
           <div className="p-4 border-b md:hidden">
             <div className="flex items-center justify-between">
-              <h3 className="font-medium">Health Context</h3>
+              <h3 className="font-medium">Patient Context</h3>
               <Button variant="ghost" size="icon" onClick={() => setShowSidebar(false)}>
                 <X className="h-5 w-5" />
               </Button>
             </div>
           </div>
-          <MemoryTagsPanel tags={memoryTags} className="h-full" />
+          <MemoryTagsPanel tags={memoryTags} profile={patientProfile} className="h-full" />
         </aside>
       </div>
 
