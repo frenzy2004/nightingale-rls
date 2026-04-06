@@ -136,6 +136,12 @@ export async function POST(request: NextRequest) {
         riskLevel: aiResponse.riskAssessment.level,
         riskSummary: aiResponse.riskAssessment.summary,
         matchedSignals: aiResponse.riskAssessment.matchedSignals,
+        ...(aiResponse.sources?.length
+          ? {
+              groundedBySearch: true,
+              sources: aiResponse.sources,
+            }
+          : {}),
       },
     };
 

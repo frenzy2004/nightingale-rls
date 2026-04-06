@@ -3,7 +3,7 @@
 import { format } from 'date-fns';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { Bird, Image, Shield, Stethoscope, User } from 'lucide-react';
+import { Bird, ExternalLink, Image, Shield, Stethoscope, User } from 'lucide-react';
 import type { AppointmentOption, Message, QuickActionOption } from '@/types';
 import { cn } from '@/lib/utils';
 import { ProviderReplyCard } from './ProviderReplyCard';
@@ -27,6 +27,7 @@ export function ChatBubble({
   const isVerified = message.authority === 'clinician_verified';
   const isProviderCard = isClinician && message.message_type !== 'chat';
   const isImageInput = message.metadata?.inputMode === 'image';
+  const aiSources = isAI ? message.metadata?.sources || [] : [];
 
   const getAvatar = () => {
     if (isPatient) {
@@ -100,17 +101,35 @@ export function ChatBubble({
             onAppointmentSelect={onAppointmentSelect}
           />
         ) : (
-          <div
-            className={cn(
-              'rounded-2xl px-4 py-2.5 text-sm',
-              isPatient
-                ? 'bg-primary text-primary-foreground rounded-br-md'
-                : isClinician
-                ? 'bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800 rounded-bl-md'
-                : 'bg-muted rounded-bl-md'
+          <div className="space-y-2">
+            <div
+              className={cn(
+                'rounded-2xl px-4 py-2.5 text-sm',
+                isPatient
+                  ? 'bg-primary text-primary-foreground rounded-br-md'
+                  : isClinician
+                  ? 'bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800 rounded-bl-md'
+                  : 'bg-muted rounded-bl-md'
+              )}
+            >
+              <p className="whitespace-pre-wrap">{message.content}</p>
+            </div>
+            {aiSources.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {aiSources.map((source) => (
+                  <a
+                    key={source.url}
+                    href={source.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-medium text-emerald-800 transition-colors hover:bg-emerald-100"
+                  >
+                    {source.publisher}
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                ))}
+              </div>
             )}
-          >
-            <p className="whitespace-pre-wrap">{message.content}</p>
           </div>
         )}
         {showTimestamp && !isProviderCard && (

@@ -32,6 +32,13 @@ export interface AppointmentOption {
   datetime: string;
 }
 
+export interface SourceReference {
+  title: string;
+  url: string;
+  publisher: string;
+  domain: string;
+}
+
 export interface ProviderIdentity {
   name: string;
   role: string;
@@ -55,6 +62,8 @@ export interface MessageMetadata {
   careStatus?: EscalationStatus;
   careStatusLabel?: string;
   summaryType?: 'triage' | 'consult';
+  groundedBySearch?: boolean;
+  sources?: SourceReference[];
 }
 
 export interface PatientProfile {

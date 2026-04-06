@@ -13,8 +13,9 @@ import {
   validateResponse,
 } from './guardrails';
 import { redactPHI } from './phi-redaction';
+import { buildWebGroundingPrompt, getTrustedWebGrounding } from './web-grounding';
 import { DEMO_PROVIDER } from '@/lib/demo';
-import type { MemoryTag, RiskAssessment, TagExtractionResult } from '@/types';
+import type { MemoryTag, RiskAssessment, SourceReference, TagExtractionResult } from '@/types';
 
 const azureRealtimeKey = process.env.AZURE_OPENAI_API_KEY || '';
 const azureRealtimeEndpoints = [
@@ -42,6 +43,7 @@ interface ChatResponseBase {
 
 export interface ChatResponse extends ChatResponseBase {
   transcript?: string;
+  sources?: SourceReference[];
 }
 
 interface RealtimeSessionOptions {
@@ -571,8 +573,19 @@ export async function generateChatResponse(
     language !== 'en'
       ? `\n\nIMPORTANT: The patient is writing in ${language}. Respond in the same language.`
       : '';
+  let groundingResult = null;
 
-  const fullSystemPrompt = SYSTEM_PROMPT + contextPrompt + languageInstruction;
+  try {
+    groundingResult = await getTrustedWebGrounding(userMessage, riskAssessment);
+  } catch (error) {
+    console.error('Trusted web grounding error:', error);
+  }
+
+  const fullSystemPrompt =
+    SYSTEM_PROMPT +
+    contextPrompt +
+    buildWebGroundingPrompt(groundingResult) +
+    languageInstruction;
 
   try {
     const realtimeResponse = await runRealtimeSession({
@@ -598,6 +611,8 @@ export async function generateChatResponse(
 
     const validatedResponse = validateResponse(preferredResponse);
     const extractedTags = await extractTags(userMessage);
+    const sources =
+      groundingResult?.sources.map(({ excerpt: _excerpt, ...source }) => source) ?? [];
 
     return {
       content: validatedResponse,
@@ -606,6 +621,7 @@ export async function generateChatResponse(
       extractedTags,
       riskAssessment,
       shouldEscalate: riskAssessment.escalationRecommended,
+      sources,
     };
   } catch (error) {
     console.error('Azure Realtime chat error:', error);
@@ -677,10 +693,26 @@ export async function generateVoiceChatResponse(
     language !== 'en'
       ? `\n\nIMPORTANT: The patient is speaking in ${language}. Respond in the same language.`
       : '';
+  let groundingResult = null;
+
+  if (preliminaryTranscript) {
+    try {
+      groundingResult = await getTrustedWebGrounding(
+        preliminaryTranscript,
+        assessMedicalRisk(preliminaryTranscript)
+      );
+    } catch (error) {
+      console.error('Trusted web grounding error:', error);
+    }
+  }
 
   try {
     const realtimeResponse = await runRealtimeSession({
-      instructions: SYSTEM_PROMPT + contextPrompt + languageInstruction,
+      instructions:
+        SYSTEM_PROMPT +
+        contextPrompt +
+        buildWebGroundingPrompt(groundingResult) +
+        languageInstruction,
       conversationHistory,
       audioBase64,
       transcriptHint: preliminaryTranscript,
@@ -727,6 +759,8 @@ export async function generateVoiceChatResponse(
       riskAssessment,
       shouldEscalate: riskAssessment.escalationRecommended,
       transcript,
+      sources:
+        groundingResult?.sources.map(({ excerpt: _excerpt, ...source }) => source) ?? [],
     };
   } catch (error) {
     console.error('Azure Realtime voice error:', error);
@@ -756,16 +790,29 @@ export async function generateImageChatResponse(
   const normalizedMessage = userMessage.trim();
   const language = normalizedMessage ? detectLanguage(normalizedMessage) : 'en';
   const contextPrompt = buildContextPrompt(memoryTags);
+  const riskAssessment = normalizedMessage
+    ? assessMedicalRisk(normalizedMessage)
+    : buildLowRiskAssessment();
   const languageInstruction =
     language !== 'en'
       ? `\n\nIMPORTANT: The patient is writing in ${language}. Respond in the same language.`
       : '';
+  let groundingResult = null;
+
+  if (normalizedMessage) {
+    try {
+      groundingResult = await getTrustedWebGrounding(normalizedMessage, riskAssessment);
+    } catch (error) {
+      console.error('Trusted web grounding error:', error);
+    }
+  }
 
   try {
     const realtimeResponse = await runRealtimeSession({
       instructions:
         SYSTEM_PROMPT +
         contextPrompt +
+        buildWebGroundingPrompt(groundingResult) +
         languageInstruction +
         '\n\nIf the image is unclear or not enough on its own, say what detail is missing and ask one short follow-up question.',
       conversationHistory,
@@ -777,9 +824,6 @@ export async function generateImageChatResponse(
     });
 
     const extractedTags = normalizedMessage ? await extractTags(normalizedMessage) : [];
-    const riskAssessment = normalizedMessage
-      ? assessMedicalRisk(normalizedMessage)
-      : buildLowRiskAssessment();
 
     return {
       content: validateResponse(realtimeResponse.text),
@@ -788,6 +832,8 @@ export async function generateImageChatResponse(
       extractedTags,
       riskAssessment,
       shouldEscalate: riskAssessment.escalationRecommended,
+      sources:
+        groundingResult?.sources.map(({ excerpt: _excerpt, ...source }) => source) ?? [],
     };
   } catch (error) {
     console.error('Azure Realtime image error:', error);
