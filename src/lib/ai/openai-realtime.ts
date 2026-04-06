@@ -48,6 +48,7 @@ interface RealtimeSessionOptions {
   instructions: string;
   conversationHistory?: ConversationEntry[];
   userText?: string;
+  userImageUrl?: string;
   audioBase64?: string;
   transcriptHint?: string;
   maxOutputTokens?: number;
@@ -87,6 +88,17 @@ function buildFallbackChatResponse(userMessage: string, riskAssessment: RiskAsse
     return 'Try noting what time you take the tablets, what you ate, and when the nausea starts. If it keeps lasting through the morning or you cannot keep fluids down, send it to the care team today.';
   }
 
+  if (
+    normalized.includes('hair') ||
+    normalized.includes('skin') ||
+    normalized.includes('moistur') ||
+    normalized.includes('shampoo') ||
+    normalized.includes('conditioner') ||
+    normalized.includes('ingredient')
+  ) {
+    return 'Try a gentle, fragrance-free moisturizer or conditioner, use lukewarm rather than hot water, and cut back on harsh or strongly scented products for a week or two. If you tell me the body area or product you are worried about, I can be more specific.';
+  }
+
   if (normalized.includes('breath') || normalized.includes('lump')) {
     return `This deserves a clinician review soon. Please send it to ${DEMO_PROVIDER.clinicianName} or the ${DEMO_PROVIDER.hospitalName} care team so they can guide the next step.`;
   }
@@ -95,7 +107,7 @@ function buildFallbackChatResponse(userMessage: string, riskAssessment: RiskAsse
     return `This sounds important enough for a clinician review. Please send it to ${DEMO_PROVIDER.clinicianName} or the ${DEMO_PROVIDER.hospitalName} care team for a verified answer.`;
   }
 
-  return 'I can help with general information here. If the symptoms are getting worse or you want more certainty, send this to your care team for a verified reply.';
+  return 'Tell me a bit more about the symptom, product, or body area you mean, and I can give a more specific answer. If it is worsening quickly or causing more serious symptoms, contact your care team.';
 }
 
 function buildDeterministicTriageSummary(
@@ -330,20 +342,31 @@ async function runRealtimeSessionAtEndpoint(
                 },
               })
             );
-          } else if (options.userText) {
-            const { redactedText } = redactPHI(options.userText);
+          } else if (options.userText || options.userImageUrl) {
+            const content: Array<Record<string, string>> = [];
+
+            if (options.userText) {
+              const { redactedText } = redactPHI(options.userText);
+              content.push({
+                type: 'input_text',
+                text: redactedText,
+              });
+            }
+
+            if (options.userImageUrl) {
+              content.push({
+                type: 'input_image',
+                image_url: options.userImageUrl,
+              });
+            }
+
             socket.send(
               JSON.stringify({
                 type: 'conversation.item.create',
                 item: {
                   type: 'message',
                   role: 'user',
-                  content: [
-                    {
-                      type: 'input_text',
-                      text: redactedText,
-                    },
-                  ],
+                  content,
                 },
               })
             );
@@ -354,7 +377,6 @@ async function runRealtimeSessionAtEndpoint(
               type: 'response.create',
               response: {
                 modalities: ['text'],
-                max_response_output_tokens: options.maxOutputTokens ?? 256,
               },
             })
           );
@@ -629,6 +651,78 @@ export async function generateVoiceChatResponse(
       riskAssessment,
       shouldEscalate: riskAssessment.escalationRecommended,
       transcript: preliminaryTranscript,
+    };
+  }
+}
+
+export async function generateImageChatResponse(
+  imageDataUrl: string,
+  userMessage: string,
+  conversationHistory: ConversationEntry[],
+  memoryTags: MemoryTag[]
+): Promise<ChatResponse> {
+  const normalizedMessage = userMessage.trim();
+  const language = normalizedMessage ? detectLanguage(normalizedMessage) : 'en';
+  const contextPrompt = buildContextPrompt(memoryTags);
+  const languageInstruction =
+    language !== 'en'
+      ? `\n\nIMPORTANT: The patient is writing in ${language}. Respond in the same language.`
+      : '';
+
+  try {
+    const realtimeResponse = await runRealtimeSession({
+      instructions:
+        SYSTEM_PROMPT +
+        contextPrompt +
+        languageInstruction +
+        '\n\nIf the image is unclear or not enough on its own, say what detail is missing and ask one short follow-up question.',
+      conversationHistory,
+      userText:
+        normalizedMessage ||
+        'Please help me understand what might be important in this image.',
+      userImageUrl: imageDataUrl,
+      maxOutputTokens: 256,
+    });
+
+    const extractedTags = normalizedMessage ? await extractTags(normalizedMessage) : [];
+    const riskAssessment = normalizedMessage
+      ? assessMedicalRisk(normalizedMessage)
+      : buildLowRiskAssessment();
+
+    return {
+      content: validateResponse(realtimeResponse.text),
+      language,
+      isEmergency: false,
+      extractedTags,
+      riskAssessment,
+      shouldEscalate: riskAssessment.escalationRecommended,
+    };
+  } catch (error) {
+    console.error('Azure Realtime image error:', error);
+
+    if (normalizedMessage) {
+      const textOnlyResponse = await generateChatResponse(
+        normalizedMessage,
+        conversationHistory,
+        memoryTags
+      );
+
+      return {
+        ...textOnlyResponse,
+        content: validateResponse(
+          `I could not inspect the image itself just now. ${textOnlyResponse.content}`
+        ),
+      };
+    }
+
+    return {
+      content:
+        'I could not inspect the image itself just now. Tell me what you are seeing or what worries you about it, and I will help from there.',
+      language,
+      isEmergency: false,
+      extractedTags: [],
+      riskAssessment: buildLowRiskAssessment(),
+      shouldEscalate: false,
     };
   }
 }

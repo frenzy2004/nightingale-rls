@@ -3,7 +3,7 @@
 import { format } from 'date-fns';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { Bird, User, Stethoscope, Shield } from 'lucide-react';
+import { Bird, Image, Shield, Stethoscope, User } from 'lucide-react';
 import type { AppointmentOption, Message, QuickActionOption } from '@/types';
 import { cn } from '@/lib/utils';
 import { ProviderReplyCard } from './ProviderReplyCard';
@@ -26,6 +26,7 @@ export function ChatBubble({
   const isClinician = message.sender === 'clinician';
   const isVerified = message.authority === 'clinician_verified';
   const isProviderCard = isClinician && message.message_type !== 'chat';
+  const isImageInput = message.metadata?.inputMode === 'image';
 
   const getAvatar = () => {
     if (isPatient) {
@@ -40,7 +41,7 @@ export function ChatBubble({
     if (isClinician) {
       return (
         <Avatar className="h-8 w-8">
-          <AvatarFallback className="bg-green-100 text-green-600">
+          <AvatarFallback className="bg-orange-100 text-orange-600">
             <Stethoscope className="h-4 w-4" />
           </AvatarFallback>
         </Avatar>
@@ -80,9 +81,15 @@ export function ChatBubble({
             {getSenderLabel()}
           </span>
           {isVerified && (
-            <Badge variant="secondary" className="text-xs py-0 px-1.5 bg-green-100 text-green-700">
+            <Badge variant="secondary" className="text-xs py-0 px-1.5 bg-orange-100 text-orange-700">
               <Shield className="h-3 w-3 mr-1" />
               Verified
+            </Badge>
+          )}
+          {isPatient && isImageInput && (
+            <Badge variant="outline" className="text-xs py-0 px-1.5">
+              <Image className="mr-1 h-3 w-3" />
+              Image
             </Badge>
           )}
         </div>
@@ -99,7 +106,7 @@ export function ChatBubble({
               isPatient
                 ? 'bg-primary text-primary-foreground rounded-br-md'
                 : isClinician
-                ? 'bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 rounded-bl-md'
+                ? 'bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800 rounded-bl-md'
                 : 'bg-muted rounded-bl-md'
             )}
           >

@@ -214,6 +214,7 @@ export function useChat({ userId, conversationId: initialConversationId, clinicI
       promptOverride?: string;
       messageMetadata?: Record<string, unknown>;
       audioBase64?: string;
+      imageDataUrl?: string;
       transcriptHint?: string;
     }
   ) => {
@@ -229,6 +230,7 @@ export function useChat({ userId, conversationId: initialConversationId, clinicI
           promptOverride: options?.promptOverride,
           messageMetadata: options?.messageMetadata,
           audioBase64: options?.audioBase64,
+          imageDataUrl: options?.imageDataUrl,
           transcriptHint: options?.transcriptHint,
           conversationId,
           userId,
@@ -287,6 +289,24 @@ export function useChat({ userId, conversationId: initialConversationId, clinicI
         displayMessage: transcriptHint || undefined,
         audioBase64,
         transcriptHint,
+      });
+    },
+    [sendChatRequest]
+  );
+
+  const sendImageMessage = useCallback(
+    async (imageDataUrl: string, prompt = '', fileName?: string) => {
+      const trimmedPrompt = prompt.trim();
+      const displayMessage = trimmedPrompt
+        ? `Shared an image: ${trimmedPrompt}`
+        : 'Shared an image with Nightingale.';
+
+      await sendChatRequest(trimmedPrompt || 'Please help me understand this image.', {
+        displayMessage,
+        imageDataUrl,
+        messageMetadata: {
+          imageName: fileName,
+        },
       });
     },
     [sendChatRequest]
@@ -367,6 +387,7 @@ export function useChat({ userId, conversationId: initialConversationId, clinicI
     careStatus,
     sendMessage,
     sendVoiceMessage,
+    sendImageMessage,
     sendProviderAction,
     sendAppointmentSelection,
     escalateToClinic,

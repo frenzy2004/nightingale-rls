@@ -25,15 +25,15 @@ export function ProviderReplyCard({
     message.message_type === 'consult_summary' ? 'Consult Summary' : 'Provider Response';
 
   return (
-    <Card className="max-w-[85%] overflow-hidden border-emerald-200 bg-white shadow-sm">
+    <Card className="max-w-[85%] overflow-hidden border-orange-200 bg-orange-50/70 shadow-sm">
       <CardContent className="space-y-4 p-4">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-orange-700">
               {title}
             </p>
             <div className="mt-1 flex items-center gap-2 text-sm font-medium text-slate-900">
-              <Stethoscope className="h-4 w-4 text-emerald-700" />
+              <Stethoscope className="h-4 w-4 text-orange-700" />
               <span>{provider?.name || 'Care team'}</span>
             </div>
             <p className="text-xs text-muted-foreground">
@@ -72,9 +72,9 @@ export function ProviderReplyCard({
         )}
 
         {appointmentOptions.length > 0 && (
-          <div className="rounded-2xl bg-slate-50 p-3">
+          <div className="rounded-2xl bg-white/80 p-3">
             <div className="mb-2 flex items-center gap-2 text-sm font-medium text-slate-900">
-              <CalendarDays className="h-4 w-4 text-emerald-700" />
+              <CalendarDays className="h-4 w-4 text-orange-700" />
               <span>Book appointment</span>
             </div>
             <div className="flex flex-wrap gap-2">

@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { createClient, createServiceClient } from '@/lib/supabase/server';
 import {
   generateChatResponse,
+  generateImageChatResponse,
   generateTriageSummary,
   generateVoiceChatResponse,
 } from '@/lib/ai/openai-realtime';
@@ -21,10 +22,11 @@ export async function POST(request: NextRequest) {
       promptOverride,
       messageMetadata,
       audioBase64,
+      imageDataUrl,
       transcriptHint,
     } = await request.json();
 
-    if ((!message && !audioBase64) || !conversationId || !userId) {
+    if ((!message && !audioBase64 && !imageDataUrl) || !conversationId || !userId) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
@@ -63,6 +65,13 @@ export async function POST(request: NextRequest) {
           (memoryTags as MemoryTag[]) || [],
           transcriptHint || message || ''
         )
+      : imageDataUrl
+      ? await generateImageChatResponse(
+          imageDataUrl,
+          promptOverride || message || '',
+          conversationHistory,
+          (memoryTags as MemoryTag[]) || []
+        )
       : await generateChatResponse(
           promptOverride || message,
           conversationHistory,
@@ -75,6 +84,7 @@ export async function POST(request: NextRequest) {
       aiResponse.transcript ||
       transcriptHint ||
       message ||
+      (imageDataUrl ? 'Shared an image with Nightingale.' : null) ||
       'Voice message sent.';
 
     const patientMessage: Omit<Message, 'created_at'> = {
@@ -89,6 +99,7 @@ export async function POST(request: NextRequest) {
       metadata: {
         ...(messageMetadata || {}),
         ...(audioBase64 ? { inputMode: 'voice' } : {}),
+        ...(imageDataUrl ? { inputMode: 'image' } : {}),
       },
     };
 
@@ -107,7 +118,7 @@ export async function POST(request: NextRequest) {
         message_id: patientMessageId,
         sender: 'patient',
         quick_action_id: messageMetadata?.quickActionId,
-        input_mode: audioBase64 ? 'voice' : 'text',
+        input_mode: audioBase64 ? 'voice' : imageDataUrl ? 'image' : 'text',
       },
     });
 

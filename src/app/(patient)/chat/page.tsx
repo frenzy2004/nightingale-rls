@@ -6,6 +6,7 @@ import { useUser } from '@/hooks/useUser';
 import { useChat } from '@/hooks/useChat';
 import { ChatBubble } from '@/components/chat/ChatBubble';
 import { ChatInput } from '@/components/chat/ChatInput';
+import { ChatModeToggle, type ChatMode } from '@/components/chat/ChatModeToggle';
 import { EscalationPrompt } from '@/components/chat/EscalationPrompt';
 import { EditBeforeSend } from '@/components/chat/EditBeforeSend';
 import { MemoryTagsPanel } from '@/components/chat/MemoryTagsPanel';
@@ -23,6 +24,7 @@ export default function ChatPage() {
   const router = useRouter();
   const [showSidebar, setShowSidebar] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [chatMode, setChatMode] = useState<ChatMode>('text');
   const scrollEndRef = useRef<HTMLDivElement>(null);
 
   const {
@@ -36,6 +38,7 @@ export default function ChatPage() {
     careStatus,
     sendMessage,
     sendVoiceMessage,
+    sendImageMessage,
     sendProviderAction,
     sendAppointmentSelection,
     escalateToClinic,
@@ -111,6 +114,7 @@ export default function ChatPage() {
       <div className="flex-1 flex overflow-hidden">
         {/* Main Chat Area */}
         <div className="flex-1 flex flex-col">
+          <ChatModeToggle mode={chatMode} onChange={setChatMode} />
           <HighRiskBanner riskAssessment={riskAssessment} />
           <CareStatusTracker escalation={careStatus} />
 
@@ -186,10 +190,18 @@ export default function ChatPage() {
 
           {/* Chat Input */}
           <ChatInput
+            mode={chatMode}
             onSend={sendMessage}
             onSendVoice={sendVoiceMessage}
+            onSendImage={sendImageMessage}
             disabled={loading}
-            placeholder="Type your question for Nightingale..."
+            placeholder={
+              chatMode === 'text'
+                ? 'Type your question for Nightingale...'
+                : chatMode === 'voice'
+                ? 'Tap the mic or type a quick follow-up...'
+                : 'Add a note about the image if helpful...'
+            }
           />
         </div>
 
