@@ -8,13 +8,19 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { User, Clock, Tag, ChevronRight } from 'lucide-react';
 import type { Escalation, MemoryTag } from '@/types';
 import { cn } from '@/lib/utils';
+import { getClinicEscalationLabel } from '@/lib/demo';
 
 interface TriageCardProps {
-  escalation: Escalation & { patient?: { full_name: string; email: string }; urgency_score?: number };
+  escalation: Escalation & {
+    patient?: { id: string; full_name: string; email: string };
+    urgency_score?: number;
+    latest_reply?: { clinician_name?: string; final_reply?: string; sent_at?: string } | null;
+  };
   onSelect: () => void;
+  onOpenPatient?: () => void;
 }
 
-export function TriageCard({ escalation, onSelect }: TriageCardProps) {
+export function TriageCard({ escalation, onSelect, onOpenPatient }: TriageCardProps) {
   const contextTags = escalation.context_snapshot as MemoryTag[];
   const statusColors = {
     pending: 'bg-amber-100 text-amber-800 border-amber-200',
@@ -39,9 +45,16 @@ export function TriageCard({ escalation, onSelect }: TriageCardProps) {
               </AvatarFallback>
             </Avatar>
             <div>
-              <h3 className="font-medium">
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onOpenPatient?.();
+                }}
+                className="font-medium text-left hover:text-primary"
+              >
                 {escalation.patient?.full_name || 'Patient'}
-              </h3>
+              </button>
               <p className="text-sm text-muted-foreground">
                 {escalation.patient?.email}
               </p>
@@ -59,7 +72,7 @@ export function TriageCard({ escalation, onSelect }: TriageCardProps) {
               </Badge>
             )}
             <Badge className={statusColors[escalation.status]}>
-              {escalation.status.replace('_', ' ')}
+              {getClinicEscalationLabel(escalation.status)}
             </Badge>
           </div>
         </div>
@@ -76,6 +89,15 @@ export function TriageCard({ escalation, onSelect }: TriageCardProps) {
           <div className="p-2 bg-muted rounded-lg">
             <p className="text-xs font-medium text-muted-foreground mb-1">AI Summary</p>
             <p className="text-xs line-clamp-2">{escalation.ai_summary}</p>
+          </div>
+        )}
+
+        {escalation.latest_reply?.final_reply && (
+          <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-2">
+            <p className="text-xs font-medium text-emerald-700">Last responded by {escalation.latest_reply.clinician_name}</p>
+            <p className="mt-1 text-xs text-emerald-950 line-clamp-2">
+              {escalation.latest_reply.final_reply}
+            </p>
           </div>
         )}
 

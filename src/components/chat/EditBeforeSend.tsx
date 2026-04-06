@@ -17,6 +17,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Send, Edit2, Tag } from 'lucide-react';
 import type { MemoryTag } from '@/types';
+import { DEMO_PROVIDER } from '@/lib/demo';
 
 interface EditBeforeSendProps {
   open: boolean;
@@ -67,7 +68,7 @@ export function EditBeforeSend({
                 placeholder="Edit your question..."
               />
               <p className="text-xs text-muted-foreground">
-                Edit your question to add any additional context or clarification.
+                This is the exact question the {DEMO_PROVIDER.hospitalName} care team will receive. You can edit it before anything is sent.
               </p>
             </div>
 
@@ -76,10 +77,10 @@ export function EditBeforeSend({
             <div className="space-y-2">
               <Label>AI Summary</Label>
               <div className="p-3 bg-muted rounded-lg text-sm">
-                {aiSummary}
+                {aiSummary || 'Patient would like a verified answer from the care team, with the tagged context below attached for review.'}
               </div>
               <p className="text-xs text-muted-foreground">
-                This summary helps the clinician understand your concern quickly.
+                This summary helps the clinician understand your concern quickly. Their reply will appear back in this thread.
               </p>
             </div>
 
@@ -117,7 +118,7 @@ export function EditBeforeSend({
                     ))}
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    This context will be shared with the clinician to help them provide better care.
+                    This context will be shared with the clinician to help them provide a faster, more informed response.
                   </p>
                 </div>
               </>

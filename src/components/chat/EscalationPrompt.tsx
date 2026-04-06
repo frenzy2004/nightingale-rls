@@ -19,7 +19,7 @@ export function EscalationPrompt({ onAccept, onDismiss }: EscalationPromptProps)
               Would you like to send this to your clinic?
             </h4>
             <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
-              A clinician can review your question and provide a verified response.
+              The care team can review your exact question and send a verified response back into this same chat.
             </p>
           </div>
           <div className="flex gap-2">

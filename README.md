@@ -1,227 +1,199 @@
 # Nightingale Patient Messenger
 
-A healthcare messenger application that enables patients to ask health questions via AI chat, accumulates medical context over time, escalates questions to clinics, and injects verified clinician responses back into the conversation.
+Nightingale is a hospital-branded patient messaging demo built for the Asia OneHealthCare / SJMC workflow:
 
-## Features
+patient chat -> tagged memory -> patient review before send -> clinic queue -> provider reply -> verified answer back in-thread
 
-- **Patient Chat Interface**: WhatsApp-simple 1-on-1 chat with Nightingale AI
-- **Multi-language Support**: Automatic language detection and response matching
-- **Memory Layer**: Persistent health context with automatic tagging
-- **Contradiction Handling**: Preserves conflicting information with status markers
-- **Clinic Escalation**: Patient-controlled escalation with edit-before-send
-- **Clinician Triage**: Support ticket view for healthcare providers
-- **Verified Responses**: Clinician replies marked as ground truth
-- **Experiment Logging**: Comprehensive event tracking for research
+The current build keeps the original trust loop and adds deterministic demo-readiness features:
 
-## Live Demo
+- branded patient and clinic surfaces
+- Malaysia-localized emergency copy (`999`, SJMC)
+- short-turn AI replies with code-level response limiting
+- provider reply cards with quick actions and mocked appointment CTA
+- seeded active queue with mixed urgency/status
+- clinic patient record page with consult-summary send-back flow
+- `DEMO_MODE` fallbacks so demo-critical UI never shows raw AI failure strings
 
-**URL**: https://nightingale-ten.vercel.app
-
-**Demo Accounts:**
+## Demo Accounts
 
 | Role | Email | Password |
 |------|-------|----------|
 | Patient | `demo.patient@nightingale.health` | `NightingaleDemo2025!` |
 | Clinician | `demo.doctor@nightingale.health` | `NightingaleDemo2025!` |
 
+Additional fake patients are seeded for the clinic queue and patient-record demo surfaces.
+
 ## Tech Stack
 
-- **Frontend**: Next.js 16.2 (App Router), React 19, TypeScript 5, Tailwind CSS 4, shadcn/ui
-- **Backend**: Supabase (Auth, Database, Realtime, Row Level Security)
-- **AI**: Google Gemini 2.5 Flash
-- **Testing**: Vitest + Testing Library
-- **Deployment**: Vercel
+- Next.js 16.2.2 App Router
+- React 19
+- TypeScript 5
+- Tailwind CSS 4 + shadcn/ui
+- Supabase Auth / Postgres / Realtime / RLS
+- Google Gemini 2.5 Flash
+- Vitest + Testing Library
 
-## Getting Started
+## Environment
 
-### Prerequisites
+Copy `.env.local.example` to `.env.local` and set:
 
-- Node.js 18+
-- Supabase account
-- Google Gemini API key
-
-### Installation
-
-1. Clone the repository:
 ```bash
-git clone https://github.com/frenzy2004/mini_hacakthon.git
-cd nightingale
+NEXT_PUBLIC_SUPABASE_URL=...
+NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+SUPABASE_SERVICE_ROLE_KEY=...
+GEMINI_API_KEY=...
+NEXT_PUBLIC_DEMO_MODE=true
 ```
 
-2. Install dependencies:
+`NEXT_PUBLIC_DEMO_MODE=true` enables the demo-safe behavior:
+
+- deterministic triage summary fallback
+- deterministic clinician draft fallback
+- deterministic chat fallback
+- provider appointment CTA on verified replies
+
+## Setup
+
+1. Install dependencies:
+
 ```bash
 npm install
 ```
 
-3. Set up environment variables:
-```bash
-cp .env.local.example .env.local
-```
+2. Run Supabase migrations in order from `supabase/migrations/`.
 
-Edit `.env.local` with your credentials:
-```
-NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
-SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
-GEMINI_API_KEY=your_gemini_api_key
-```
+Important demo migrations:
 
-4. Set up Supabase:
-   - Create a new Supabase project
-   - Run migrations in order from `supabase/migrations/`
-   - Disable email confirmation: Dashboard > Authentication > Providers > Email
-   - Enable Realtime for `messages`, `escalations`, and `clinician_replies` tables
+- `006_demo_readiness_schema.sql`
+- `007_demo_readiness_seed.sql`
 
-5. Start the development server:
+These add:
+
+- richer `clinics` branding fields
+- `patient_profiles`
+- `messages.message_type`
+- `messages.metadata`
+- `escalations.updated_at`
+- seeded Asia OneHealthCare / SJMC demo data
+
+3. Ensure Realtime is enabled for:
+
+- `messages`
+- `escalations`
+- `clinician_replies`
+
+4. Start the app:
+
 ```bash
 npm run dev
 ```
 
-## How Memory Works
+## Core Flow
 
-The memory system automatically extracts and tags medical information from patient messages:
+### Patient Web App
 
-### Tag Categories
-- `#medication` - Drugs, supplements, dosages
-- `#symptom` - Reported symptoms
-- `#condition` - Diagnosed conditions
-- `#procedure` - Medical procedures
-- `#allergy` - Known allergies
-- `#lifestyle` - Diet, exercise, habits
-- `#timeline` - Dates and durations
+- The patient chats with Nightingale in a WhatsApp-style thread.
+- AI replies are hard-limited to short turns and localized for the demo.
+- Deterministic risk assessment drives the inline urgent banner.
+- After enough turns or a higher-risk message, the patient sees `Send to Clinic`.
+- The review-before-send modal always shows the exact outbound question and tagged context.
+- After send, the patient sees a status tracker:
+  - `Sent to care team`
+  - `Care team reviewing`
+  - `Response received`
 
-### Status Markers
-- `active` - Current state
-- `stopped` - Discontinued
-- `resolved` - No longer an issue
-- `flagged` - Needs clarification (contradiction detected)
+### Clinic Web App
 
-### Authority Levels
-- `ai_extracted` - Automatically extracted by AI
-- `clinician_verified` - Confirmed by healthcare provider
+- The clinic queue is branded for Asia OneHealthCare / SJMC.
+- Seeded demo data keeps the queue active with mixed urgency and statuses.
+- Queue states are displayed as:
+  - `Received`
+  - `Reviewing`
+  - `Responded`
+- Providers can open a reply editor, edit the AI draft, and send a verified response.
+- Patient names open an EMR-style patient page with allergies, history stats, recent Q&A, and consult summary send-back.
 
-### Contradiction Resolution
+### Verified Provider Messages
 
-When the system detects conflicting information (e.g., "I take Panadol" followed by "I stopped last week"):
+Verified provider replies are stored as `message_type = provider_reply` and include metadata for:
 
-1. Both states are preserved with their `source_message_id` pointers
-2. The `status` field tracks the current state
-3. If the existing tag is `clinician_verified`, both are flagged for review
-4. Otherwise, the status is updated to reflect the most recent information
+- provider identity
+- disclaimer copy
+- quick actions
+- mocked appointment slots
 
-## How Escalation Works
+Consult summaries are injected with `message_type = consult_summary`.
 
-### Trigger
-After 3+ turns or when the AI indicates uncertainty, patients see: "Send this to your clinic?"
+## Memory and Context
 
-### Patient Control
-1. Patient clicks "Send to Clinic"
-2. Edit Before Send modal opens with:
-   - Editable question text
-   - AI-generated summary
-   - Relevant tagged context
-3. Patient reviews, edits, and confirms
+The memory layer stores extracted facts in `memory_tags` instead of relying on full transcript retrieval.
 
-### Clinic Triage
-1. Clinicians see pending escalations in triage queue
-2. Each item shows: patient question, AI summary, context snapshot
-3. AI generates a draft response for the clinician to edit
+Tracked categories include:
 
-### Verified Response
-1. Clinician edits and sends the response
-2. Response appears in patient chat as a distinct "Clinician" bubble
-3. Marked with `authority: clinician_verified`
-4. Both AI draft and final reply are stored for research
+- medications
+- symptoms
+- procedures
+- diagnoses / conditions
+- allergies
+- lifestyle
+- timelines
 
-## How RBAC is Enforced
+Each tag keeps:
 
-### Role Types
-- `patient` - Can only access own data
-- `clinician` - Can access patients in their clinic
-- `admin` - Same as clinician
+- `value`
+- `tags`
+- `status`
+- `authority`
+- `source_message_id`
+- timestamps
 
-### Row Level Security (RLS)
+Contradictions are preserved instead of silently overwritten. The live chat path now performs contradiction detection when new tags are written, and clinician-verified messages can flag older AI-derived context.
 
-All access control is enforced at the database level:
+## Security
 
-**Messages**
-- Patients: Can view/insert own messages only
-- Clinicians: Can view/insert messages for patients in their clinic
+RBAC is enforced with Supabase RLS plus server-side API checks:
 
-**Memory Tags**
-- Patients: Can view/update own tags only
-- Clinicians: Can view tags for patients in their clinic
+- patients cannot access clinic routes or clinic APIs
+- patients can only access their own messages, escalations, and patient profile
+- clinicians/admins are scoped to their own clinic
+- APIs still verify the authenticated user before using the service client for privileged queries
 
-**Escalations**
-- Patients: Can view/create own escalations only
-- Clinicians: Can view/update escalations for their clinic
+The repo uses helper SQL functions such as `get_my_role()`, `get_my_clinic_id()`, and `get_my_profile()` to avoid recursive RLS issues.
 
-**Clinician Replies**
-- Patients: Can view replies to their escalations
-- Clinicians: Can view/create replies for their clinic
+## Key Tables
 
-### Route Protection
+- `messages`
+- `memory_tags`
+- `escalations`
+- `clinician_replies`
+- `patient_profiles`
+- `experiment_logs`
+- `clinics`
+- `users`
 
-Middleware enforces:
-- Unauthenticated users redirected to login
-- Patients redirected away from `/clinic/*` routes
-- Clinicians redirected to triage after login
-
-## Running Tests
+## Scripts
 
 ```bash
-# Run tests
-npm test
-
-# Run tests once
+npm run dev
+npm run build
 npm run test:run
 ```
 
-### Test Coverage
+## Verification Notes
 
-- `test_escalation_trigger` - Verifies escalation prompt, patient edit, context packaging
-- `test_memory_contradiction` - Verifies both states preserved, status markers, source pointers
-- `test_clinic_reply_injection` - Verifies verified bubble, authority marking, conflict flagging
-- `test_access_control` - Verifies RBAC policies
-- `test_edit_delta_log` - Verifies AI draft and clinician edit storage
+- `npm run build` passes.
+- `npm run test:run` is currently blocked in this Codex sandbox by a Windows `spawn EPERM` during Vitest startup, even though the app build succeeds.
 
-## Project Structure
+## Demo Scenarios
 
-```
-src/
-├── app/
-│   ├── (auth)/           # Login/register pages
-│   ├── (patient)/        # Patient chat
-│   ├── clinic/           # Clinician portal (triage + reply)
-│   └── api/              # API routes (chat, escalate, reply)
-├── components/
-│   ├── chat/             # ChatBubble, ChatInput, EscalationPrompt, EditBeforeSend, MemoryTagsPanel
-│   ├── clinic/           # TriageCard, ReplyEditor
-│   └── ui/               # shadcn components
-├── hooks/                # useUser, useChat
-├── lib/
-│   ├── ai/               # Gemini, prompts, guardrails, PHI redaction, tag-extractor
-│   └── supabase/         # Browser client, server client, middleware
-└── types/                # TypeScript types
-```
+1. Context build-up:
+   patient asks a question over 2-3 turns, tags accumulate, and the high-risk banner/status logic can appear.
 
-## Experiment Logging
+2. Review before send:
+   patient edits the outbound clinic question and sends it to the care team.
 
-All events are logged to `experiment_logs` table:
+3. Verified response loop:
+   clinician replies from the queue, the provider card appears back in-thread, and the patient can tap quick actions or appointment CTA.
 
-| Event Type | Description |
-|------------|-------------|
-| `message_sent` | Patient, AI, or clinician message |
-| `escalation_triggered` | Escalation created |
-| `escalation_prompt_shown` | Prompt displayed to patient |
-| `patient_edit_before_send` | Patient edited question |
-| `clinician_edit_before_send` | Clinician edited response |
-| `ai_clinician_diff` | Diff between AI draft and final |
-| `verified_answer_injected` | Clinician reply added to chat |
-| `response_turnaround_time` | Time from escalation to response |
-| `contradiction_detected` | Conflicting information found |
-| `tag_extracted` | Memory tag created |
-
-## License
-
-MIT
+4. EMR detail flow:
+   clinician opens the patient record page, reviews recent queue history, records a consult, and sends a consult summary back to the patient messenger.

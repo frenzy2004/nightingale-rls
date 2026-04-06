@@ -1,3 +1,6 @@
+import type { RiskAssessment } from '@/types';
+import { DEMO_PROVIDER } from '@/lib/demo';
+
 interface GuardrailResult {
   safe: boolean;
   reason?: string;
@@ -5,7 +8,6 @@ interface GuardrailResult {
 }
 
 const UNSAFE_PATTERNS = [
-  /\b(kill|suicide|self[- ]?harm|end my life)\b/i,
   /\b(how to (make|create|synthesize) (drugs?|meth|cocaine|heroin))\b/i,
   /\b(overdose on purpose)\b/i,
 ];
@@ -26,7 +28,45 @@ const EMERGENCY_KEYWORDS = [
   'seizure',
   'overdose',
   'suicidal',
+  'self-harm',
+  'end my life',
   'want to die',
+];
+
+const HIGH_RISK_KEYWORDS = [
+  'shortness of breath',
+  'breathless',
+  'lump',
+  'faint',
+  'fainted',
+  'vomiting',
+  'vision loss',
+  'weakness',
+  'bleeding',
+  'coughing blood',
+  'black stool',
+  'severe headache',
+  'confused',
+  'seizure',
+];
+
+const MODERATE_RISK_KEYWORDS = [
+  'biopsy',
+  'chemotherapy',
+  'infusion',
+  'nausea',
+  'dizzy',
+  'swelling',
+  'pain getting worse',
+  'worsening',
+  'fever',
+  'infection',
+];
+
+const FILLER_PHRASES = [
+  /^i'?m sorry[^.?!]*[.?!]\s*/i,
+  /^that sounds really hard[^.?!]*[.?!]\s*/i,
+  /^i understand[^.?!]*[.?!]\s*/i,
 ];
 
 export function checkInputSafety(content: string): GuardrailResult {
@@ -51,6 +91,57 @@ export function checkInputSafety(content: string): GuardrailResult {
   }
 
   return { safe: true };
+}
+
+export function assessMedicalRisk(content: string): RiskAssessment {
+  const normalized = content.toLowerCase();
+  const emergencySignals = EMERGENCY_KEYWORDS.filter((keyword) =>
+    normalized.includes(keyword)
+  );
+  const highSignals = HIGH_RISK_KEYWORDS.filter((keyword) =>
+    normalized.includes(keyword)
+  );
+  const moderateSignals = MODERATE_RISK_KEYWORDS.filter((keyword) =>
+    normalized.includes(keyword)
+  );
+
+  if (emergencySignals.length > 0) {
+    return {
+      level: 'high',
+      matchedSignals: emergencySignals,
+      summary: 'Urgent symptom language detected. The patient needs immediate safety guidance.',
+      emergency: true,
+      escalationRecommended: true,
+    };
+  }
+
+  if (highSignals.length > 0 || moderateSignals.length >= 2) {
+    return {
+      level: 'high',
+      matchedSignals: [...highSignals, ...moderateSignals],
+      summary: 'Higher-risk symptom or oncology follow-up language detected. Escalation is recommended.',
+      emergency: false,
+      escalationRecommended: true,
+    };
+  }
+
+  if (moderateSignals.length > 0) {
+    return {
+      level: 'medium',
+      matchedSignals: moderateSignals,
+      summary: 'Clinically relevant follow-up signs detected. A clinician review may help if symptoms continue.',
+      emergency: false,
+      escalationRecommended: false,
+    };
+  }
+
+  return {
+    level: 'low',
+    matchedSignals: [],
+    summary: 'No deterministic high-risk signals detected.',
+    emergency: false,
+    escalationRecommended: false,
+  };
 }
 
 export function checkOutputSafety(content: string): GuardrailResult {
@@ -90,24 +181,46 @@ export function addUncertaintyMarkers(content: string): string {
 }
 
 export function getEmergencyResponse(): string {
-  return `I'm concerned about what you've shared. If you're experiencing a medical emergency, please call emergency services (911 in the US) or go to your nearest emergency room immediately.
+  return `This sounds urgent. Please go to the nearest emergency department now or dial ${DEMO_PROVIDER.emergencyPhone} for emergency help.
 
-If you're having thoughts of self-harm, please reach out to a crisis helpline:
-- National Suicide Prevention Lifeline: 988
-- Crisis Text Line: Text HOME to 741741
-
-Your health and safety matter. Please seek immediate help.`;
+If you are heading to ${DEMO_PROVIDER.hospitalName}, bring any medication list with you.`;
 }
 
 export function validateResponse(response: string): string {
   const outputCheck = checkOutputSafety(response);
   let finalResponse = outputCheck.modifiedContent || response;
-  
-  finalResponse = addUncertaintyMarkers(finalResponse);
 
-  if (finalResponse.length > 1000) {
-    const sentences = finalResponse.split(/[.!?]+/).filter(Boolean);
-    finalResponse = sentences.slice(0, 4).join('. ') + '.';
+  for (const phrase of FILLER_PHRASES) {
+    finalResponse = finalResponse.replace(phrase, '');
+  }
+
+  finalResponse = addUncertaintyMarkers(finalResponse);
+  finalResponse = finalResponse.replace(/\s+/g, ' ').trim();
+
+  const sentences = finalResponse
+    .split(/(?<=[.!?])\s+/)
+    .map((sentence) => sentence.trim())
+    .filter(Boolean)
+    .slice(0, 3);
+
+  finalResponse = sentences.join(' ');
+
+  const questionCount = (finalResponse.match(/\?/g) || []).length;
+  if (questionCount > 1) {
+    let seenQuestion = false;
+    finalResponse = finalResponse
+      .split('')
+      .map((char) => {
+        if (char !== '?') return char;
+        if (seenQuestion) return '.';
+        seenQuestion = true;
+        return char;
+      })
+      .join('');
+  }
+
+  if (!/[.!?]$/.test(finalResponse)) {
+    finalResponse = `${finalResponse}.`;
   }
 
   return finalResponse;

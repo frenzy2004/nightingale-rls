@@ -1,151 +1,139 @@
-# Nightingale Patient Messenger — Technical Brief
+# Nightingale Patient Messenger - Technical Brief
 
-## Architecture Diagram
+## Architecture
 
-```
-  PATIENT                    AI + MEMORY LAYER                 CLINIC PORTAL
-  ──────                    ─────────────────                 ────────────────
-  
-  ┌──────────────┐          ┌──────────────────┐          ┌──────────────────┐
-  │ Messenger UI │──────▶│  PHI Redaction     │          │  Triage Queue    │
-  │ (WhatsApp-   │        │  ↓                 │          │  (urgency-scored)│
-  │  style chat) │        │  Gemini 2.5 Flash  │          │                  │
-  └──────┬───────┘        │  ↓                 │          │  AI summary +    │
-         │                │  Tag Extraction    │          │  context snapshot│
-         │                │  ↓                 │          └────────┬─────────┘
-  ┌──────▼───────┐        │  Contradiction     │                   │
-  │ Edit + Send  │        │  Detection         │          ┌────────▼─────────┐
-  │ (patient     │        └────────┬───────────┘          │  AI Draft + Edit │
-  │  reviews &   │                 │                      │  (clinician edits│
-  │  edits)      │                 │                      │   signs off,     │
-  └──────┬───────┘                 │                      │   sends)         │
-         │                         │                      └────────┬─────────┘
-         │                ┌────────▼───────────┐                   │
-  ┌──────▼───────┐        │  Memory Store      │          ┌────────▼─────────┐
-  │ Verified     │◀───────│  (tagged, versioned│◀─────────│  Edit Delta Log  │
-  │ Bubble       │        │   contradiction-   │          │  (AI draft vs    │
-  │ (clinician   │        │   aware)           │          │   final diff)    │
-  │  answer)     │        └────────────────────┘          └──────────────────┘
-  └──────────────┘                 │
-                                   │
-                          ┌────────▼───────────┐
-                          │    SUPABASE        │
-                          │  ┌──────────────┐  │
-                          │  │ PostgreSQL   │  │
-                          │  │ Auth + RLS   │  │
-                          │  │ Realtime     │  │
-                          │  └──────────────┘  │
-                          └────────────────────┘
+```text
+PATIENT WEB APP                 AI + MEMORY LAYER                   CLINIC WEB APP
+----------------                -----------------                   ---------------
+
+Branded messenger UI  --->      PHI redaction                  ---> Branded triage queue
+High-risk banner                Risk classifier                      Status chips + urgency
+Review-before-send              Gemini 2.5 Flash                     Patient detail / EMR mock
+Care-team status tracker        Deterministic demo fallbacks         Reply editor
+Provider reply cards            Tag extraction + contradictions      Consult summary composer
+Quick actions + appointment     Supabase persistence + logging       Verified send pipeline
+
+                                      |
+                                      v
+                                SUPABASE
+                     Auth + Postgres + RLS + Realtime
 ```
 
-**Request flow**: Patient message → PHI redaction → Gemini generates response → tags extracted → both messages + tags persisted → after N turns, escalation offered → patient edits & sends → clinician sees in triage → edits AI draft → verified reply injected back into patient thread via Realtime.
+## Request Flow
 
-## Schema: Messages ↔ Memory/Tags ↔ Escalations ↔ Clinician Replies
+1. Patient sends a message in the PWA.
+2. The server runs PHI redaction and deterministic risk assessment.
+3. Gemini generates a short-turn response, or `DEMO_MODE` falls back to a deterministic one.
+4. Extracted tags are written to `memory_tags`, and contradictions are handled in the real chat write path.
+5. After enough turns or higher-risk content, the patient sees `Send to Clinic`.
+6. The patient reviews and edits the exact outbound question before anything is sent.
+7. The clinic queue receives the escalated item with AI summary + tagged context snapshot.
+8. The provider edits the AI draft and sends a verified response.
+9. The verified response is injected back into the same patient thread through Realtime, with provider metadata, disclaimer, quick actions, and mocked appointment slots.
+10. A clinician can also send a consult summary from the patient record page as a distinct verified message.
 
+## Schema
+
+```text
+clinics (1) ------< users (many)
+                      |
+                      +------< patient_profiles (1:1 with patient user)
+                      |
+                      +------< messages
+                               - message_type
+                               - metadata JSONB
+                               |
+                               +------< memory_tags
+                                        - status
+                                        - authority
+                                        - source_message_id
+
+users (patient) ----< escalations
+                      - patient_edited_question
+                      - ai_summary
+                      - context_snapshot
+                      - status
+                      - updated_at
+                      |
+                      +------< clinician_replies
+                               - ai_draft
+                               - final_reply
+                               - diff_log
+
+experiment_logs
 ```
-clinics (1) ──────< users (many)
-                      │
-                      │ user_id
-                      ▼
-                   messages ──────────────────┐
-                      │                        │ source_message_id
-                      │ conversation_id        ▼
-                      │                    memory_tags
-                      │                    (value, tags[], status,
-                      │                     authority, source_message_id,
-                      │                     updated_at)
-                      │
-                      │ patient_id
-                      ▼
-                   escalations ───────< clinician_replies
-                   (patient_edited_     (ai_draft, final_reply,
-                    question,            diff_log, clinician_id,
-                    ai_summary,          message_id → messages)
-                    context_snapshot,
-                    status)
-                                        
-                   experiment_logs (append-only event stream)
-```
 
-| Table | Purpose | Key Relationships |
-|-------|---------|-------------------|
-| `messages` | All chat turns (patient, AI, clinician) | `user_id → users`, `conversation_id` groups a thread |
-| `memory_tags` | Extracted medical facts | `source_message_id → messages`, `user_id → users` |
-| `escalations` | Questions sent to clinic | `patient_id → users`, `clinic_id → clinics`, carries `context_snapshot` (JSONB) |
-| `clinician_replies` | Clinician responses + edit tracking | `escalation_id → escalations`, `message_id → messages` (the injected verified bubble) |
-| `experiment_logs` | Research event stream | `event_type` + `payload` (JSONB), append-only |
+## Key Design Decisions
 
-## Assumptions and First-Principles Thinking
+### Tagged memory over transcript retrieval
 
-### Why tagged memory instead of transcript retrieval?
+The app stores structured patient facts instead of repeatedly scanning the whole chat transcript. This keeps escalation packaging cheap and predictable even as conversations grow.
 
-The spec identifies the problem: flat transcript retrieval has unbounded token cost and latency. Our solution:
+### Contradictions are preserved
 
-- Extract **structured tags** from each message in real-time (medications, symptoms, procedures, diagnoses, timelines)
-- Store with **metadata** (status, authority, source pointer, timestamps)
-- Package **only relevant tags** with escalations via keyword matching
+If a patient says `I take Panadol` and later says `I stopped last week`, both states are preserved. The chat API now runs contradiction handling directly in the live write path, and clinician-verified replies can flag older AI-derived tags.
 
-Result: O(1) context retrieval. A 100-message conversation produces the same-sized context payload as a 5-message one.
+### Deterministic demo mode
 
-### Why both states on contradiction?
+The demo brief explicitly called out failure states that should never appear in front of a hospital audience. `DEMO_MODE` therefore provides deterministic fallbacks for:
 
-Medical facts change — patients start and stop medications. The system must reflect reality, not enforce consistency.
+- patient chat
+- triage summaries
+- clinician drafts
 
-When "I take Panadol" is followed by "I stopped last week":
-1. Original tag preserved unchanged (audit trail)
-2. New tag inserted with `status: stopped` and distinct `source_message_id`
-3. Both records exist with their own timestamps
-4. When a clinician replies, their verified facts get `authority: clinician_verified` and conflicting AI tags are set to `status: flagged`
+This keeps the real architecture in place while preventing brittle UI during a demo.
 
-The clinician's reply is what resolves the contradiction — it carries the highest authority.
+### Provider messages are first-class data
 
-### Why patient-in-the-loop is mandatory?
+Verified provider messages are not just plain text. They are stored with:
 
-Healthcare communication requires informed consent. The patient must see exactly what context is being shared with their clinic before it leaves their device. The Edit Before Send modal is not a nice-to-have — it's the mechanism that makes the escalation trustworthy.
+- `message_type`
+- provider identity metadata
+- disclaimer copy
+- quick actions
+- appointment slot data
 
-### Why urgency scoring?
+That metadata powers the patient-side provider card without parsing message text.
 
-Clinicians shouldn't manually sort a triage queue. We score dynamically:
-- Flagged (contradicted) tags: **+3 points** each — contradictions need attention
-- Active tags: **+1 point** each — more context = more complex case
-- Hours pending: **+1 point/hour** (max 10) — older unresolved questions float up
+## What Changed for Demo Readiness
 
-## What We Cut and Why
-
-| Cut | Reason | Impact |
-|-----|--------|--------|
-| **NeMo Guardrails** | Spec listed as a question, not a requirement. Built custom guardrails layer instead (input safety, response validation, emergency detection). NeMo adds deployment complexity with marginal benefit for a prototype. | Low — custom guardrails cover the critical cases |
-| **Voice AI** | Explicitly out of scope per spec | None |
-| **EMR integration** | Explicitly out of scope per spec | None |
-| **Billing** | Explicitly out of scope per spec | None |
-| **Multi-model routing** | Using Gemini 2.5 Flash for all tasks (chat, tags, summaries, drafts). Production would route by cost/quality. | Acceptable — Flash is fast and cheap enough for all tasks |
-| **RAG knowledge base** | The `diff_log` data is being collected (AI draft vs clinician edit), but we don't yet use it to improve future drafts. The infrastructure is in place — accumulation happens, retrieval doesn't. | Foundation built, retrieval is a future iteration |
+- Added Asia OneHealthCare / SJMC branding across landing, auth, patient, and clinic surfaces.
+- Localized emergency messaging to Malaysia (`999`) and SJMC.
+- Added always-visible patient safety footer.
+- Added deterministic high-risk banner and escalation recommendation path.
+- Added patient care-team status tracker:
+  - `Sent to care team`
+  - `Care team reviewing`
+  - `Response received`
+- Added seeded demo queue with mixed urgency and realistic timestamps.
+- Added patient detail / EMR-style page with allergies, history stats, recent queue Q&A, and consult-summary send-back.
 
 ## Security and Access Control
 
-**Server-side enforced via Supabase RLS + API auth checks:**
+Server-side protections remain enforced through Supabase RLS plus API auth checks:
 
-- Patient cannot access `/clinic/*` routes (client redirect + API auth)
-- Patient A cannot see Patient B's messages (RLS: `user_id = auth.uid()`)
-- Clinician can only see patients in their own clinic (RLS via `SECURITY DEFINER` helper functions)
-- API routes authenticate via `auth.getUser()`, then use service role for DB operations
-- PHI redaction strips SSNs, phone numbers, emails, DOBs before sending to Gemini
+- patients cannot access clinic queue pages or clinic APIs
+- patients can only access their own data
+- clinicians/admins are limited to patients in their own clinic
+- APIs verify the authenticated user before using the service client for cross-table reads
 
-**SECURITY DEFINER pattern**: RLS policies on the `users` table caused infinite recursion (a policy checking the user's role queries the same table). We created `get_my_role()`, `get_my_clinic_id()`, and `get_my_profile()` as PostgreSQL functions with `SECURITY DEFINER` that bypass RLS for self-referential lookups.
+The project keeps the `SECURITY DEFINER` helper function pattern to avoid recursive RLS policies on `users`.
 
 ## Experiment Logging
 
-Built in from day one. Every significant event is logged to `experiment_logs`:
+The prototype continues logging trust-loop research events, including:
 
-| Event | What's Captured |
-|-------|-----------------|
-| `message_sent` | Every patient, AI, and clinician message (with sender, conversation_id) |
-| `escalation_triggered` | Turn count at escalation, conversation_id |
-| `patient_edit_before_send` | Original question vs. patient-edited version |
-| `clinician_edit_before_send` | AI draft vs. clinician final reply |
-| `ai_clinician_diff` | Structured diff between AI draft and final (for KB building) |
-| `verified_answer_injected` | Clinician reply inserted into patient thread + response turnaround time |
-| `tag_extracted` | Each new memory tag with confidence score |
-| `contradiction_detected` | When conflicting tags are identified |
+- `message_sent`
+- `escalation_triggered`
+- `patient_edit_before_send`
+- `clinician_edit_before_send`
+- `ai_clinician_diff`
+- `verified_answer_injected`
+- `response_turnaround_time`
+- `tag_extracted`
+- `contradiction_detected`
 
-This supports the paper: measuring trust loop effectiveness, AI draft quality (via edit distance), escalation patterns, and clinician response times.
+## Test / Verification Status
+
+- The application builds successfully with `npm run build`.
+- The existing Vitest suite cannot be executed from this Codex sandbox because Vitest startup hits a Windows `spawn EPERM` before tests run.

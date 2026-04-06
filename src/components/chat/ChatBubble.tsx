@@ -4,19 +4,28 @@ import { format } from 'date-fns';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Bird, User, Stethoscope, Shield } from 'lucide-react';
-import type { Message } from '@/types';
+import type { AppointmentOption, Message, QuickActionOption } from '@/types';
 import { cn } from '@/lib/utils';
+import { ProviderReplyCard } from './ProviderReplyCard';
 
 interface ChatBubbleProps {
   message: Message;
   showTimestamp?: boolean;
+  onQuickAction?: (action: QuickActionOption, message: Message) => void;
+  onAppointmentSelect?: (option: AppointmentOption, message: Message) => void;
 }
 
-export function ChatBubble({ message, showTimestamp = true }: ChatBubbleProps) {
+export function ChatBubble({
+  message,
+  showTimestamp = true,
+  onQuickAction,
+  onAppointmentSelect,
+}: ChatBubbleProps) {
   const isPatient = message.sender === 'patient';
   const isAI = message.sender === 'ai';
   const isClinician = message.sender === 'clinician';
   const isVerified = message.authority === 'clinician_verified';
+  const isProviderCard = isClinician && message.message_type !== 'chat';
 
   const getAvatar = () => {
     if (isPatient) {
@@ -77,19 +86,27 @@ export function ChatBubble({ message, showTimestamp = true }: ChatBubbleProps) {
             </Badge>
           )}
         </div>
-        <div
-          className={cn(
-            'rounded-2xl px-4 py-2.5 text-sm',
-            isPatient
-              ? 'bg-primary text-primary-foreground rounded-br-md'
-              : isClinician
-              ? 'bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 rounded-bl-md'
-              : 'bg-muted rounded-bl-md'
-          )}
-        >
-          <p className="whitespace-pre-wrap">{message.content}</p>
-        </div>
-        {showTimestamp && (
+        {isProviderCard ? (
+          <ProviderReplyCard
+            message={message}
+            onQuickAction={onQuickAction}
+            onAppointmentSelect={onAppointmentSelect}
+          />
+        ) : (
+          <div
+            className={cn(
+              'rounded-2xl px-4 py-2.5 text-sm',
+              isPatient
+                ? 'bg-primary text-primary-foreground rounded-br-md'
+                : isClinician
+                ? 'bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 rounded-bl-md'
+                : 'bg-muted rounded-bl-md'
+            )}
+          >
+            <p className="whitespace-pre-wrap">{message.content}</p>
+          </div>
+        )}
+        {showTimestamp && !isProviderCard && (
           <span className="text-xs text-muted-foreground mt-1">
             {format(new Date(message.created_at), 'h:mm a')}
           </span>

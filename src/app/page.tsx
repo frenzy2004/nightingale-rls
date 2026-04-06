@@ -1,18 +1,15 @@
 import Link from 'next/link';
-import { Bird, MessageCircle, Shield, Clock, Users } from 'lucide-react';
+import { MessageCircle, Shield, Clock, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { BrandMark } from '@/components/brand/BrandMark';
+import { DEMO_PROVIDER } from '@/lib/demo';
 
 export default function HomePage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(15,108,93,0.16),_transparent_34%),radial-gradient(circle_at_bottom_right,_rgba(242,185,72,0.12),_transparent_28%),linear-gradient(180deg,#f7fbfa_0%,#ffffff_100%)]">
       <header className="container mx-auto px-4 py-6">
         <nav className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="p-2 bg-primary rounded-full">
-              <Bird className="h-6 w-6 text-primary-foreground" />
-            </div>
-            <span className="text-xl font-bold">Nightingale</span>
-          </div>
+          <BrandMark />
           <div className="flex gap-3">
             <Link href="/login">
               <Button variant="ghost">Sign in</Button>
@@ -26,12 +23,14 @@ export default function HomePage() {
 
       <main className="container mx-auto px-4 py-20">
         <div className="text-center max-w-3xl mx-auto">
+          <p className="mb-4 text-sm font-semibold uppercase tracking-[0.24em] text-emerald-700">
+            Asia OneHealthCare at {DEMO_PROVIDER.hospitalName}
+          </p>
           <h1 className="text-5xl font-bold tracking-tight mb-6">
-            Your Personal Health Assistant
+            Patient chat that reaches a real care team
           </h1>
           <p className="text-xl text-muted-foreground mb-8">
-            Get answers to your health questions with AI-powered chat,
-            backed by verified responses from real healthcare providers.
+            Short AI guidance for everyday questions, then a clean handoff to {DEMO_PROVIDER.clinicianName} and the {DEMO_PROVIDER.hospitalName} team when you need a verified answer.
           </p>
           <div className="flex gap-4 justify-center">
             <Link href="/register">
@@ -96,12 +95,9 @@ export default function HomePage() {
 
       <footer className="container mx-auto px-4 py-8 border-t">
         <div className="flex items-center justify-between text-sm text-muted-foreground">
-          <div className="flex items-center gap-2">
-            <Bird className="h-4 w-4" />
-            <span>Nightingale Health</span>
-          </div>
+          <span>{DEMO_PROVIDER.providerName}</span>
           <p>
-            Not a substitute for professional medical advice.
+            Verified replies appear back in the same patient thread.
           </p>
         </div>
       </footer>

@@ -9,9 +9,14 @@ import { ChatInput } from '@/components/chat/ChatInput';
 import { EscalationPrompt } from '@/components/chat/EscalationPrompt';
 import { EditBeforeSend } from '@/components/chat/EditBeforeSend';
 import { MemoryTagsPanel } from '@/components/chat/MemoryTagsPanel';
+import { HighRiskBanner } from '@/components/chat/HighRiskBanner';
+import { CareStatusTracker } from '@/components/chat/CareStatusTracker';
+import { PatientSafetyFooter } from '@/components/chat/PatientSafetyFooter';
+import { BrandMark } from '@/components/brand/BrandMark';
 import { Button } from '@/components/ui/button';
-import { Separator } from '@/components/ui/separator';
+import { Badge } from '@/components/ui/badge';
 import { Bird, Menu, LogOut, Tag, X, Loader2 } from 'lucide-react';
+import { DEMO_PROVIDER } from '@/lib/demo';
 
 export default function ChatPage() {
   const { user, loading: userLoading, signOut } = useUser();
@@ -27,7 +32,11 @@ export default function ChatPage() {
     initialLoading,
     showEscalationPrompt,
     pendingEscalation,
+    riskAssessment,
+    careStatus,
     sendMessage,
+    sendProviderAction,
+    sendAppointmentSelection,
     escalateToClinic,
     dismissEscalation,
   } = useChat({
@@ -66,19 +75,16 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-background">
+    <div className="min-h-screen flex flex-col bg-[radial-gradient(circle_at_top,_rgba(15,108,93,0.12),_transparent_40%),linear-gradient(180deg,#f8fbfb_0%,#fdfdfc_100%)]">
       {/* Header */}
-      <header className="flex items-center justify-between px-4 py-3 border-b bg-card">
+      <header className="sticky top-0 z-20 flex items-center justify-between border-b border-slate-200/80 bg-white/90 px-4 py-3 backdrop-blur">
         <div className="flex items-center gap-3">
-          <div className="p-2 bg-primary rounded-full">
-            <Bird className="h-5 w-5 text-primary-foreground" />
-          </div>
-          <div>
-            <h1 className="font-semibold">Nightingale</h1>
-            <p className="text-xs text-muted-foreground">Your health assistant</p>
-          </div>
+          <BrandMark compact />
         </div>
         <div className="flex items-center gap-2">
+          <Badge variant="outline" className="hidden md:inline-flex border-emerald-200 bg-emerald-50 text-emerald-700">
+            {DEMO_PROVIDER.clinicianName}
+          </Badge>
           <Button
             variant="ghost"
             size="icon"
@@ -104,6 +110,9 @@ export default function ChatPage() {
       <div className="flex-1 flex overflow-hidden">
         {/* Main Chat Area */}
         <div className="flex-1 flex flex-col">
+          <HighRiskBanner riskAssessment={riskAssessment} />
+          <CareStatusTracker escalation={careStatus} />
+
           <div className="flex-1 overflow-y-auto">
             <div className="max-w-3xl mx-auto">
               {initialLoading ? (
@@ -111,27 +120,26 @@ export default function ChatPage() {
                   <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                 </div>
               ) : messages.length === 0 ? (
-                <div className="text-center py-20 px-4">
-                  <div className="p-4 bg-primary/10 rounded-full w-fit mx-auto mb-4">
+                <div className="px-4 py-20 text-center">
+                  <div className="mx-auto mb-4 w-fit rounded-full bg-primary/10 p-4">
                     <Bird className="h-12 w-12 text-primary" />
                   </div>
                   <h2 className="text-xl font-semibold mb-2">Welcome to Nightingale</h2>
-                  <p className="text-muted-foreground max-w-md mx-auto">
-                    I&apos;m here to help you with your health questions. Feel free to ask me anything,
-                    and I&apos;ll do my best to assist you.
+                  <p className="mx-auto max-w-md text-muted-foreground">
+                    Short, careful answers for everyday questions, with a direct path to the {DEMO_PROVIDER.hospitalName} care team when you want a verified reply.
                   </p>
                   <div className="mt-6 space-y-2 text-sm text-muted-foreground">
                     <p>Try asking me:</p>
                     <div className="flex flex-wrap gap-2 justify-center">
                       {[
-                        'What could cause a headache?',
-                        'How much water should I drink?',
-                        'What are symptoms of the flu?',
+                        'How should I get ready for my biopsy?',
+                        'What should I watch for after treatment?',
+                        'Can I send this to my care team?',
                       ].map((suggestion) => (
                         <button
                           key={suggestion}
                           onClick={() => sendMessage(suggestion)}
-                          className="px-3 py-1.5 bg-muted rounded-full hover:bg-muted/80 transition-colors"
+                          className="rounded-full bg-white px-3 py-1.5 shadow-sm ring-1 ring-slate-200 transition-colors hover:bg-muted/80"
                         >
                           {suggestion}
                         </button>
@@ -142,7 +150,12 @@ export default function ChatPage() {
               ) : (
                 <>
                   {messages.map((message) => (
-                    <ChatBubble key={message.id} message={message} />
+                    <ChatBubble
+                      key={message.id}
+                      message={message}
+                      onQuickAction={sendProviderAction}
+                      onAppointmentSelect={sendAppointmentSelection}
+                    />
                   ))}
                   {loading && (
                     <div className="flex gap-3 p-4">
@@ -174,7 +187,7 @@ export default function ChatPage() {
           <ChatInput
             onSend={sendMessage}
             disabled={loading}
-            placeholder="Type your health question..."
+            placeholder="Type your question for Nightingale..."
           />
         </div>
 
@@ -199,6 +212,8 @@ export default function ChatPage() {
           <MemoryTagsPanel tags={memoryTags} className="h-full" />
         </aside>
       </div>
+
+      <PatientSafetyFooter />
 
       {/* Edit Before Send Modal */}
       {pendingEscalation && (

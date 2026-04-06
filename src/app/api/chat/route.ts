@@ -1,13 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { generateChatResponse, generateTriageSummary } from '@/lib/ai/gemini';
+import { detectContradictions, handleContradictions } from '@/lib/ai/tag-extractor';
 import { logExperiment } from '@/lib/experiment-logger';
 import { v4 as uuidv4 } from 'uuid';
 import type { Message, MemoryTag } from '@/types';
 
 export async function POST(request: NextRequest) {
   try {
-    const { message, conversationId, userId, memoryTags } = await request.json();
+    const {
+      message,
+      conversationId,
+      userId,
+      memoryTags,
+      displayMessage,
+      promptOverride,
+      messageMetadata,
+    } = await request.json();
 
     if (!message || !conversationId || !userId) {
       return NextResponse.json(
@@ -28,6 +37,8 @@ export async function POST(request: NextRequest) {
 
     // Use service client for all DB operations (bypasses RLS)
     const supabase = await createServiceClient();
+    const visibleMessage = displayMessage || message;
+    const promptMessage = promptOverride || message;
 
     const { data: existingMessages } = await supabase
       .from('messages')
@@ -45,10 +56,12 @@ export async function POST(request: NextRequest) {
       id: patientMessageId,
       user_id: userId,
       conversation_id: conversationId,
-      content: message,
+      content: visibleMessage,
       sender: 'patient',
       authority: 'ai_generated',
       language: null,
+      message_type: 'chat',
+      metadata: messageMetadata || {},
     };
 
     const { error: patientError } = await supabase
@@ -70,11 +83,18 @@ export async function POST(request: NextRequest) {
         conversation_id: conversationId,
         message_id: patientMessageId,
         sender: 'patient',
+        quick_action_id: messageMetadata?.quickActionId,
       },
     });
 
+    const { data: existingTags } = await supabase
+      .from('memory_tags')
+      .select('*')
+      .eq('user_id', userId)
+      .in('status', ['active', 'flagged', 'stopped']);
+
     const aiResponse = await generateChatResponse(
-      message,
+      promptMessage,
       conversationHistory,
       memoryTags as MemoryTag[]
     );
@@ -88,6 +108,12 @@ export async function POST(request: NextRequest) {
       sender: 'ai',
       authority: 'ai_generated',
       language: aiResponse.language,
+      message_type: 'chat',
+      metadata: {
+        riskLevel: aiResponse.riskAssessment.level,
+        riskSummary: aiResponse.riskAssessment.summary,
+        matchedSignals: aiResponse.riskAssessment.matchedSignals,
+      },
     };
 
     const { error: aiError } = await supabase
@@ -110,8 +136,14 @@ export async function POST(request: NextRequest) {
         message_id: aiMessageId,
         sender: 'ai',
         is_emergency: aiResponse.isEmergency,
+        risk_level: aiResponse.riskAssessment.level,
       },
     });
+
+    const contradictions = detectContradictions(
+      aiResponse.extractedTags,
+      (existingTags as MemoryTag[]) || []
+    );
 
     const newTags: MemoryTag[] = [];
     for (const tag of aiResponse.extractedTags) {
@@ -149,13 +181,22 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    if (contradictions.length > 0) {
+      await handleContradictions(
+        supabase,
+        userId,
+        contradictions,
+        newTags
+      );
+    }
+
     let aiSummary = '';
     const updatedMessages = [
       ...conversationHistory.map(h => ({ 
         sender: h.role === 'user' ? 'patient' : 'ai', 
         content: h.content 
       })),
-      { sender: 'patient', content: message },
+      { sender: 'patient', content: visibleMessage },
       { sender: 'ai', content: aiResponse.content },
     ];
     
@@ -173,6 +214,8 @@ export async function POST(request: NextRequest) {
       newTags,
       aiSummary,
       relevantTags,
+      riskAssessment: aiResponse.riskAssessment,
+      shouldEscalate: aiResponse.shouldEscalate,
     });
   } catch (error) {
     console.error('Chat API error:', error);

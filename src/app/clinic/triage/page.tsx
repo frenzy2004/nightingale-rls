@@ -5,11 +5,11 @@ import { useRouter } from 'next/navigation';
 import { useUser } from '@/hooks/useUser';
 import { createClient } from '@/lib/supabase/client';
 import { TriageCard } from '@/components/clinic/TriageCard';
+import { BrandMark } from '@/components/brand/BrandMark';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
-  Bird,
   LogOut,
   Inbox,
   Clock,
@@ -18,6 +18,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import type { Escalation } from '@/types';
+import { DEMO_PROVIDER, getClinicEscalationLabel } from '@/lib/demo';
 
 type FilterStatus = 'all' | 'pending' | 'in_progress' | 'resolved';
 
@@ -45,11 +46,7 @@ export default function TriagePage() {
 
     setLoading(true);
     try {
-      const response = await fetch(
-        `/api/escalate?clinicId=${user.clinic_id}${
-          filter !== 'all' ? `&status=${filter}` : ''
-        }`
-      );
+      const response = await fetch(`/api/escalate?clinicId=${user.clinic_id}`);
       const data = await response.json();
       setEscalations(data.escalations || []);
     } catch (error) {
@@ -119,16 +116,14 @@ export default function TriagePage() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-[linear-gradient(180deg,#f6fbfb_0%,#ffffff_100%)]">
       {/* Header */}
-      <header className="sticky top-0 z-10 flex items-center justify-between px-4 py-3 border-b bg-card">
+      <header className="sticky top-0 z-10 flex items-center justify-between border-b bg-white/90 px-4 py-3 backdrop-blur">
         <div className="flex items-center gap-3">
-          <div className="p-2 bg-primary rounded-full">
-            <Bird className="h-5 w-5 text-primary-foreground" />
-          </div>
-          <div>
-            <h1 className="font-semibold">Nightingale Clinic</h1>
-            <p className="text-xs text-muted-foreground">Triage Queue</p>
+          <BrandMark compact />
+          <div className="hidden md:block border-l pl-3">
+            <p className="text-sm font-medium text-slate-900">{DEMO_PROVIDER.hospitalName} Queue</p>
+            <p className="text-xs text-muted-foreground">Provider: {DEMO_PROVIDER.clinicianName}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -142,6 +137,18 @@ export default function TriagePage() {
       </header>
 
       <div className="max-w-4xl mx-auto p-4">
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <Badge className="bg-emerald-100 text-emerald-700">
+            {DEMO_PROVIDER.providerName}
+          </Badge>
+          <Badge variant="outline">
+            {DEMO_PROVIDER.hospitalName}
+          </Badge>
+          <Badge variant="outline">
+            Mixed urgency demo queue
+          </Badge>
+        </div>
+
         {/* Filter Tabs */}
         <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
           <Button
@@ -196,13 +203,11 @@ export default function TriagePage() {
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
         ) : filteredEscalations.length === 0 ? (
-          <div className="text-center py-20">
-            <Inbox className="h-12 w-12 mx-auto mb-4 text-muted-foreground/50" />
-            <h3 className="font-medium mb-1">No {filter} escalations</h3>
+          <div className="rounded-3xl border border-dashed border-slate-300 bg-white px-6 py-16 text-center shadow-sm">
+            <Inbox className="mx-auto mb-4 h-12 w-12 text-muted-foreground/50" />
+            <h3 className="mb-1 font-medium">No {getClinicEscalationLabel(filter as Exclude<FilterStatus, 'all'>) || filter} items right now</h3>
             <p className="text-sm text-muted-foreground">
-              {filter === 'pending'
-                ? 'New patient questions will appear here'
-                : 'No escalations match this filter'}
+              The demo queue is empty for this filter. Switch tabs or create a fresh escalation from the patient chat to refill it.
             </p>
           </div>
         ) : (
@@ -211,8 +216,13 @@ export default function TriagePage() {
               {filteredEscalations.map((escalation) => (
                 <TriageCard
                   key={escalation.id}
-                  escalation={escalation as Escalation & { patient?: { full_name: string; email: string } }}
+                  escalation={escalation as Escalation & {
+                    patient?: { id: string; full_name: string; email: string };
+                    urgency_score?: number;
+                    latest_reply?: { clinician_name?: string; final_reply?: string; sent_at?: string } | null;
+                  }}
                   onSelect={() => handleSelectEscalation(escalation)}
+                  onOpenPatient={() => router.push(`/clinic/patients/${escalation.patient_id}`)}
                 />
               ))}
             </div>

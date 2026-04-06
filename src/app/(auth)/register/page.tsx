@@ -8,7 +8,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Bird, Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
+import { BrandMark } from '@/components/brand/BrandMark';
+import { DEMO_PROVIDER } from '@/lib/demo';
 
 export default function RegisterPage() {
   const [email, setEmail] = useState('');
@@ -56,17 +58,15 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 p-4">
+    <div className="min-h-screen flex items-center justify-center bg-[radial-gradient(circle_at_top,_rgba(15,108,93,0.14),_transparent_36%),linear-gradient(180deg,#f7fbfa_0%,#ffffff_100%)] p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <div className="flex justify-center mb-4">
-            <div className="p-3 bg-primary rounded-full">
-              <Bird className="h-8 w-8 text-primary-foreground" />
-            </div>
+          <div className="mb-4 flex justify-center">
+            <BrandMark compact />
           </div>
           <CardTitle className="text-2xl">Create Account</CardTitle>
           <CardDescription>
-            Join Nightingale to manage your health
+            Join {DEMO_PROVIDER.providerName} at {DEMO_PROVIDER.hospitalName}
           </CardDescription>
         </CardHeader>
         <CardContent>

@@ -4,11 +4,78 @@ export type MessageSender = 'patient' | 'ai' | 'clinician';
 
 export type MessageAuthority = 'ai_generated' | 'clinician_verified';
 
+export type MessageType = 'chat' | 'provider_reply' | 'consult_summary';
+
 export type TagStatus = 'active' | 'stopped' | 'resolved' | 'flagged';
 
 export type TagAuthority = 'ai_extracted' | 'clinician_verified';
 
 export type EscalationStatus = 'pending' | 'in_progress' | 'resolved';
+
+export type RiskLevel = 'low' | 'medium' | 'high';
+
+export interface BrandTheme {
+  primary: string;
+  accent: string;
+  surface: string;
+  ink: string;
+}
+
+export interface QuickActionOption {
+  id: string;
+  label: string;
+}
+
+export interface AppointmentOption {
+  id: string;
+  label: string;
+  datetime: string;
+}
+
+export interface ProviderIdentity {
+  name: string;
+  role: string;
+  providerName: string;
+  hospitalName: string;
+  specialty?: string | null;
+}
+
+export interface MessageMetadata {
+  riskLevel?: RiskLevel;
+  riskSummary?: string;
+  matchedSignals?: string[];
+  provider?: ProviderIdentity;
+  disclaimer?: string;
+  quickActions?: QuickActionOption[];
+  appointmentOptions?: AppointmentOption[];
+  quickActionId?: string;
+  sourceMessageId?: string;
+  careStatus?: EscalationStatus;
+  careStatusLabel?: string;
+  summaryType?: 'triage' | 'consult';
+}
+
+export interface PatientProfile {
+  user_id: string;
+  age_label: string | null;
+  mrn: string | null;
+  allergies: string[];
+  headline: string | null;
+  summary: string | null;
+  history_stats: Record<string, string>;
+  recent_history: string[];
+  preferred_language: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RiskAssessment {
+  level: RiskLevel;
+  matchedSignals: string[];
+  summary: string;
+  emergency: boolean;
+  escalationRecommended: boolean;
+}
 
 export interface User {
   id: string;
@@ -22,6 +89,12 @@ export interface User {
 export interface Clinic {
   id: string;
   name: string;
+  provider_name: string | null;
+  hospital_name: string | null;
+  emergency_phone: string | null;
+  primary_clinician_name: string | null;
+  primary_specialty: string | null;
+  brand_theme: BrandTheme | Record<string, unknown> | null;
   created_at: string;
 }
 
@@ -33,6 +106,8 @@ export interface Message {
   sender: MessageSender;
   authority: MessageAuthority;
   language: string | null;
+  message_type: MessageType;
+  metadata: MessageMetadata | null;
   created_at: string;
 }
 
@@ -60,6 +135,7 @@ export interface Escalation {
   context_snapshot: MemoryTag[];
   status: EscalationStatus;
   created_at: string;
+  updated_at: string;
 }
 
 export interface ClinicianReply {
@@ -111,6 +187,7 @@ export interface EscalationPayload {
   aiSummary: string;
   contextSnapshot: MemoryTag[];
   conversationId: string;
+  riskAssessment?: RiskAssessment | null;
 }
 
 export interface TagExtractionResult {

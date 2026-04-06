@@ -3,6 +3,7 @@ import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { generateTriageSummary, generateClinicianDraft } from '@/lib/ai/gemini';
 import { getRelevantTagsForEscalation } from '@/lib/ai/tag-extractor';
 import { logExperiment, logPatientEdit, logEscalationTriggered } from '@/lib/experiment-logger';
+import { getPatientEscalationLabel } from '@/lib/demo';
 import { v4 as uuidv4 } from 'uuid';
 import type { MemoryTag } from '@/types';
 
@@ -125,7 +126,7 @@ export async function POST(request: NextRequest) {
 
     const aiDraft = await generateClinicianDraft(
       patientEditedQuestion,
-      contextSnapshot as MemoryTag[]
+      (contextSnapshot as MemoryTag[]) || relevantTags
     );
 
     return NextResponse.json({
@@ -133,6 +134,11 @@ export async function POST(request: NextRequest) {
       aiSummary: summary,
       contextSnapshot: relevantTags,
       aiDraft,
+      escalation: {
+        ...escalation,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
     });
   } catch (error) {
     console.error('Escalation error:', error);
@@ -148,6 +154,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const clinicId = searchParams.get('clinicId');
     const status = searchParams.get('status');
+    const conversationId = searchParams.get('conversationId');
 
     const authClient2 = await createClient();
     const { data: { user: getUser } } = await authClient2.auth.getUser();
@@ -165,6 +172,38 @@ export async function GET(request: NextRequest) {
       .eq('id', getUser.id)
       .single();
 
+    if (userData?.role === 'patient') {
+      let patientQuery = supabaseGet
+        .from('escalations')
+        .select('*')
+        .eq('patient_id', getUser.id)
+        .order('created_at', { ascending: false });
+
+      if (conversationId) {
+        patientQuery = patientQuery.eq('conversation_id', conversationId);
+      }
+      if (status) {
+        patientQuery = patientQuery.eq('status', status);
+      }
+
+      const { data: escalations, error } = await patientQuery;
+
+      if (error) {
+        console.error('Error fetching patient escalations:', error);
+        return NextResponse.json(
+          { error: 'Failed to fetch escalations' },
+          { status: 500 }
+        );
+      }
+
+      const enriched = (escalations || []).map((escalation) => ({
+        ...escalation,
+        patient_status_label: getPatientEscalationLabel(escalation.status),
+      }));
+
+      return NextResponse.json({ escalations: enriched });
+    }
+
     if (userData?.role !== 'clinician' && userData?.role !== 'admin') {
       return NextResponse.json(
         { error: 'Forbidden' },
@@ -178,7 +217,8 @@ export async function GET(request: NextRequest) {
       .from('escalations')
       .select(`
         *,
-        patient:users!escalations_patient_id_fkey(id, full_name, email)
+        patient:users!escalations_patient_id_fkey(id, full_name, email),
+        clinician_replies(id, final_reply, sent_at, clinician_id)
       `)
       .eq('clinic_id', effectiveClinicId)
       .order('created_at', { ascending: false });
@@ -197,15 +237,54 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Score each escalation by urgency: flagged tags, age, unresolved signals
-    const scored = (escalations || []).map(esc => {
+    const clinicianIds = Array.from(new Set(
+      (escalations || [])
+        .flatMap((esc) =>
+          ((esc.clinician_replies || []) as Array<{ clinician_id: string | null }>)
+            .map((reply) => reply.clinician_id)
+        )
+        .filter(Boolean)
+    )) as string[];
+
+    const clinicianMap = new Map<string, string>();
+    if (clinicianIds.length > 0) {
+      const { data: clinicians } = await supabaseGet
+        .from('users')
+        .select('id, full_name')
+        .in('id', clinicianIds);
+
+      for (const clinician of clinicians || []) {
+        clinicianMap.set(clinician.id, clinician.full_name || 'Care team');
+      }
+    }
+
+    const scored = (escalations || []).map((esc) => {
       let urgency = 0;
       const snapshot = (esc.context_snapshot as MemoryTag[]) || [];
-      urgency += snapshot.filter(t => t.status === 'flagged').length * 3;
-      urgency += snapshot.filter(t => t.status === 'active').length;
+      urgency += snapshot.filter((t) => t.status === 'flagged').length * 3;
+      urgency += snapshot.filter((t) => t.status === 'active').length;
       const ageHours = (Date.now() - new Date(esc.created_at).getTime()) / (1000 * 60 * 60);
       if (esc.status === 'pending') urgency += Math.min(Math.floor(ageHours), 10);
-      return { ...esc, urgency_score: urgency };
+
+      const latestReply = [
+        ...((esc.clinician_replies || []) as Array<{
+          clinician_id: string;
+          final_reply: string;
+          sent_at: string;
+        }>),
+      ].sort((a, b) => new Date(b.sent_at).getTime() - new Date(a.sent_at).getTime())[0];
+
+      return {
+        ...esc,
+        urgency_score: urgency,
+        latest_reply: latestReply
+          ? {
+              ...latestReply,
+              clinician_name:
+                clinicianMap.get(latestReply.clinician_id) || 'Care team',
+            }
+          : null,
+      };
     });
 
     scored.sort((a, b) => b.urgency_score - a.urgency_score);

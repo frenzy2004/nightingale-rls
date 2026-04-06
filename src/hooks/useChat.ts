@@ -2,8 +2,17 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { synthesizeQuickActionPrompt } from '@/lib/demo';
 import { v4 as uuidv4 } from 'uuid';
-import type { Message, MemoryTag, EscalationPayload } from '@/types';
+import type {
+  AppointmentOption,
+  Escalation,
+  EscalationPayload,
+  MemoryTag,
+  Message,
+  QuickActionOption,
+  RiskAssessment,
+} from '@/types';
 
 const ESCALATION_TURN_THRESHOLD = 3;
 
@@ -11,6 +20,23 @@ interface UseChatOptions {
   userId: string;
   conversationId?: string;
   clinicId?: string;
+}
+
+function upsertMessage(messages: Message[], message: Message): Message[] {
+  if (messages.some((item) => item.id === message.id)) {
+    return messages;
+  }
+
+  return [...messages, message];
+}
+
+function upsertTag(tags: MemoryTag[], tag: MemoryTag): MemoryTag[] {
+  const existing = tags.findIndex((item) => item.id === tag.id);
+  if (existing === -1) {
+    return [tag, ...tags];
+  }
+
+  return tags.map((item) => (item.id === tag.id ? tag : item));
 }
 
 export function useChat({ userId, conversationId: initialConversationId, clinicId }: UseChatOptions) {
@@ -22,15 +48,19 @@ export function useChat({ userId, conversationId: initialConversationId, clinicI
   const [turnCount, setTurnCount] = useState(0);
   const [showEscalationPrompt, setShowEscalationPrompt] = useState(false);
   const [pendingEscalation, setPendingEscalation] = useState<EscalationPayload | null>(null);
+  const [riskAssessment, setRiskAssessment] = useState<RiskAssessment | null>(null);
+  const [careStatus, setCareStatus] = useState<Escalation | null>(null);
 
   const supabase = createClient();
 
-  // Resolve or create a conversation, then load messages and tags
   useEffect(() => {
+    if (!userId) {
+      return;
+    }
+
     const loadExistingData = async () => {
       let activeConversationId = initialConversationId || '';
 
-      // If no explicit conversationId, find the user's most recent one
       if (!activeConversationId) {
         const { data: recentMessage } = await supabase
           .from('messages')
@@ -45,7 +75,7 @@ export function useChat({ userId, conversationId: initialConversationId, clinicI
 
       setConversationId(activeConversationId);
 
-      const [messagesResult, tagsResult] = await Promise.all([
+      const [messagesResult, tagsResult, escalationResult] = await Promise.all([
         supabase
           .from('messages')
           .select('*')
@@ -56,20 +86,45 @@ export function useChat({ userId, conversationId: initialConversationId, clinicI
           .select('*')
           .eq('user_id', userId)
           .order('updated_at', { ascending: false }),
+        supabase
+          .from('escalations')
+          .select('*')
+          .eq('patient_id', userId)
+          .eq('conversation_id', activeConversationId)
+          .order('created_at', { ascending: false })
+          .limit(1),
       ]);
 
       if (messagesResult.data) {
-        setMessages(messagesResult.data);
-        const patientMessages = messagesResult.data.filter((m: Message) => m.sender === 'patient');
+        setMessages(messagesResult.data as Message[]);
+        const patientMessages = messagesResult.data.filter((message: Message) => message.sender === 'patient');
         setTurnCount(patientMessages.length);
+
+        const latestAiMessage = [...messagesResult.data]
+          .reverse()
+          .find((message: Message) => message.sender === 'ai');
+        if (latestAiMessage?.metadata?.riskLevel) {
+          setRiskAssessment({
+            level: latestAiMessage.metadata.riskLevel,
+            matchedSignals: latestAiMessage.metadata.matchedSignals || [],
+            summary: latestAiMessage.metadata.riskSummary || '',
+            emergency: latestAiMessage.metadata.riskLevel === 'high',
+            escalationRecommended: latestAiMessage.metadata.riskLevel === 'high',
+          });
+        }
       }
       if (tagsResult.data) {
-        setMemoryTags(tagsResult.data);
+        setMemoryTags(tagsResult.data as MemoryTag[]);
       }
+      if (escalationResult.data?.[0]) {
+        setCareStatus(escalationResult.data[0] as Escalation);
+      }
+
       setInitialLoading(false);
     };
 
     loadExistingData();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId, initialConversationId]);
 
   useEffect(() => {
@@ -87,10 +142,7 @@ export function useChat({ userId, conversationId: initialConversationId, clinicI
         },
         (payload: { new: unknown }) => {
           const newMessage = payload.new as Message;
-          setMessages((prev) => {
-            if (prev.some(m => m.id === newMessage.id)) return prev;
-            return [...prev, newMessage];
-          });
+          setMessages((prev) => upsertMessage(prev, newMessage));
         }
       )
       .subscribe();
@@ -98,9 +150,71 @@ export function useChat({ userId, conversationId: initialConversationId, clinicI
     return () => {
       supabase.removeChannel(channel);
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversationId]);
 
-  const sendMessage = useCallback(async (content: string) => {
+  useEffect(() => {
+    if (!userId) return;
+
+    const channel = supabase
+      .channel(`memory_tags:${userId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'memory_tags',
+          filter: `user_id=eq.${userId}`,
+        },
+        (payload: { new: unknown }) => {
+          const tag = payload.new as MemoryTag;
+          setMemoryTags((prev) => upsertTag(prev, tag));
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId]);
+
+  useEffect(() => {
+    if (!userId || !conversationId) return;
+
+    const channel = supabase
+      .channel(`escalations:${userId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'escalations',
+          filter: `patient_id=eq.${userId}`,
+        },
+        (payload: { new: unknown }) => {
+          const escalation = payload.new as Escalation;
+          if (escalation.conversation_id === conversationId) {
+            setCareStatus(escalation);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversationId, userId]);
+
+  const sendChatRequest = useCallback(async (
+    content: string,
+    options?: {
+      displayMessage?: string;
+      promptOverride?: string;
+      messageMetadata?: Record<string, unknown>;
+    }
+  ) => {
     setLoading(true);
 
     try {
@@ -109,6 +223,9 @@ export function useChat({ userId, conversationId: initialConversationId, clinicI
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           message: content,
+          displayMessage: options?.displayMessage,
+          promptOverride: options?.promptOverride,
+          messageMetadata: options?.messageMetadata,
           conversationId,
           userId,
           memoryTags,
@@ -121,22 +238,32 @@ export function useChat({ userId, conversationId: initialConversationId, clinicI
 
       const data = await response.json();
 
-      setMessages((prev) => [...prev, data.patientMessage, data.aiMessage]);
-      
+      setMessages((prev) => upsertMessage(upsertMessage(prev, data.patientMessage), data.aiMessage));
+
       if (data.newTags && data.newTags.length > 0) {
-        setMemoryTags((prev) => [...data.newTags, ...prev]);
+        setMemoryTags((prev) =>
+          data.newTags.reduce(
+            (nextTags: MemoryTag[], tag: MemoryTag) => upsertTag(nextTags, tag),
+            prev
+          )
+        );
       }
 
       const newTurnCount = turnCount + 1;
       setTurnCount(newTurnCount);
+      setRiskAssessment(data.riskAssessment || null);
 
-      if (newTurnCount >= ESCALATION_TURN_THRESHOLD && !showEscalationPrompt) {
+      const escalationShouldShow =
+        Boolean(data.shouldEscalate) || newTurnCount >= ESCALATION_TURN_THRESHOLD;
+
+      if (escalationShouldShow && !showEscalationPrompt) {
         setShowEscalationPrompt(true);
         setPendingEscalation({
-          question: content,
+          question: options?.displayMessage || content,
           aiSummary: data.aiSummary || '',
           contextSnapshot: data.relevantTags || memoryTags.slice(0, 10),
           conversationId,
+          riskAssessment: data.riskAssessment || null,
         });
       }
     } catch (error) {
@@ -145,6 +272,35 @@ export function useChat({ userId, conversationId: initialConversationId, clinicI
       setLoading(false);
     }
   }, [conversationId, userId, memoryTags, turnCount, showEscalationPrompt]);
+
+  const sendMessage = useCallback(async (content: string) => {
+    await sendChatRequest(content);
+  }, [sendChatRequest]);
+
+  const sendProviderAction = useCallback(async (action: QuickActionOption, message: Message) => {
+    await sendChatRequest(action.label, {
+      displayMessage: action.label,
+      promptOverride: synthesizeQuickActionPrompt(
+        action,
+        message.content,
+        message.metadata?.provider
+      ),
+      messageMetadata: {
+        quickActionId: action.id,
+        sourceMessageId: message.id,
+      },
+    });
+  }, [sendChatRequest]);
+
+  const sendAppointmentSelection = useCallback(async (option: AppointmentOption, message: Message) => {
+    await sendChatRequest(`Book ${option.label}`, {
+      displayMessage: `Book ${option.label}`,
+      promptOverride: `The patient selected the mock appointment slot "${option.label}" after this provider message: "${message.content}". Confirm that the request is noted, explain that the care team will confirm the slot, and keep it to 2 short sentences.`,
+      messageMetadata: {
+        sourceMessageId: message.id,
+      },
+    });
+  }, [sendChatRequest]);
 
   const escalateToClinic = useCallback(async (editedQuestion: string) => {
     if (!pendingEscalation || !clinicId) return;
@@ -165,9 +321,14 @@ export function useChat({ userId, conversationId: initialConversationId, clinicI
         throw new Error('Failed to escalate');
       }
 
+      const data = await response.json();
+
       setShowEscalationPrompt(false);
       setPendingEscalation(null);
       setTurnCount(0);
+      if (data.escalation) {
+        setCareStatus(data.escalation as Escalation);
+      }
     } catch (error) {
       console.error('Error escalating:', error);
     }
@@ -187,7 +348,11 @@ export function useChat({ userId, conversationId: initialConversationId, clinicI
     turnCount,
     showEscalationPrompt,
     pendingEscalation,
+    riskAssessment,
+    careStatus,
     sendMessage,
+    sendProviderAction,
+    sendAppointmentSelection,
     escalateToClinic,
     dismissEscalation,
   };

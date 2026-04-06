@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import type { Escalation, MemoryTag, DiffEntry } from '@/types';
 import { format } from 'date-fns';
+import { DEMO_PROVIDER, getClinicEscalationLabel } from '@/lib/demo';
 
 interface ReplyEditorProps {
   escalation: Escalation & { patient?: { full_name: string; email: string } };
@@ -72,11 +73,11 @@ export function ReplyEditor({
         <div className="flex-1">
           <h2 className="font-semibold">Reply to Patient</h2>
           <p className="text-sm text-muted-foreground">
-            {escalation.patient?.full_name || 'Patient'}
+            {escalation.patient?.full_name || 'Patient'} · {DEMO_PROVIDER.hospitalName}
           </p>
         </div>
         <Badge variant="secondary">
-          {escalation.status.replace('_', ' ')}
+          {getClinicEscalationLabel(escalation.status)}
         </Badge>
       </div>
 
@@ -227,8 +228,7 @@ export function ReplyEditor({
             </div>
 
             <p className="text-xs text-muted-foreground">
-              Edit the AI-generated draft before sending. Your name will be
-              attached to this response.
+              Edit the AI-generated draft before sending. The verified response will appear back in the patient messenger with your provider details attached.
             </p>
           </div>
         </div>
