@@ -35,6 +35,7 @@ export default function ChatPage() {
     riskAssessment,
     careStatus,
     sendMessage,
+    sendVoiceMessage,
     sendProviderAction,
     sendAppointmentSelection,
     escalateToClinic,
@@ -186,6 +187,7 @@ export default function ChatPage() {
           {/* Chat Input */}
           <ChatInput
             onSend={sendMessage}
+            onSendVoice={sendVoiceMessage}
             disabled={loading}
             placeholder="Type your question for Nightingale..."
           />

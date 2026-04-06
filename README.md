@@ -30,7 +30,7 @@ Additional fake patients are seeded for the clinic queue and patient-record demo
 - TypeScript 5
 - Tailwind CSS 4 + shadcn/ui
 - Supabase Auth / Postgres / Realtime / RLS
-- Google Gemini 2.5 Flash
+- Azure OpenAI Realtime (`gpt-realtime-1.5` with `gpt-realtime` fallback)
 - Vitest + Testing Library
 
 ## Environment
@@ -41,7 +41,9 @@ Copy `.env.local.example` to `.env.local` and set:
 NEXT_PUBLIC_SUPABASE_URL=...
 NEXT_PUBLIC_SUPABASE_ANON_KEY=...
 SUPABASE_SERVICE_ROLE_KEY=...
-GEMINI_API_KEY=...
+AZURE_OPENAI_API_KEY=...
+AZURE_OPENAI_REALTIME_ENDPOINT=...
+AZURE_OPENAI_REALTIME_FALLBACK_ENDPOINT=...
 NEXT_PUBLIC_DEMO_MODE=true
 ```
 
@@ -94,6 +96,7 @@ npm run dev
 
 - The patient chats with Nightingale in a WhatsApp-style thread.
 - AI replies are hard-limited to short turns and localized for the demo.
+- Patients can use the mic toggle to record a short voice note, which is transcribed and answered in the same thread.
 - Deterministic risk assessment drives the inline urgent banner.
 - After enough turns or a higher-risk message, the patient sees `Send to Clinic`.
 - The review-before-send modal always shows the exact outbound question and tagged context.

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { generateClinicianDraft } from '@/lib/ai/gemini';
+import { generateClinicianDraft } from '@/lib/ai/openai-realtime';
 import type { MemoryTag } from '@/types';
 
 export async function POST(request: NextRequest) {

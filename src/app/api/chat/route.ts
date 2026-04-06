@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { v4 as uuidv4 } from 'uuid';
 import { createClient, createServiceClient } from '@/lib/supabase/server';
-import { generateChatResponse, generateTriageSummary } from '@/lib/ai/gemini';
+import {
+  generateChatResponse,
+  generateTriageSummary,
+  generateVoiceChatResponse,
+} from '@/lib/ai/openai-realtime';
 import { detectContradictions, handleContradictions } from '@/lib/ai/tag-extractor';
 import { logExperiment } from '@/lib/experiment-logger';
-import { v4 as uuidv4 } from 'uuid';
-import type { Message, MemoryTag } from '@/types';
+import type { MemoryTag, Message } from '@/types';
 
 export async function POST(request: NextRequest) {
   try {
@@ -16,29 +20,24 @@ export async function POST(request: NextRequest) {
       displayMessage,
       promptOverride,
       messageMetadata,
+      audioBase64,
+      transcriptHint,
     } = await request.json();
 
-    if (!message || !conversationId || !userId) {
-      return NextResponse.json(
-        { error: 'Missing required fields' },
-        { status: 400 }
-      );
+    if ((!message && !audioBase64) || !conversationId || !userId) {
+      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
-    // Auth check with anon client
     const authClient = await createClient();
-    const { data: { user } } = await authClient.auth.getUser();
+    const {
+      data: { user },
+    } = await authClient.auth.getUser();
+
     if (!user || user.id !== userId) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Use service client for all DB operations (bypasses RLS)
     const supabase = await createServiceClient();
-    const visibleMessage = displayMessage || message;
-    const promptMessage = promptOverride || message;
 
     const { data: existingMessages } = await supabase
       .from('messages')
@@ -46,34 +45,58 @@ export async function POST(request: NextRequest) {
       .eq('conversation_id', conversationId)
       .order('created_at', { ascending: true });
 
-    const conversationHistory = (existingMessages || []).map(m => ({
-      role: m.sender === 'patient' ? 'user' as const : 'model' as const,
-      content: m.content,
+    const conversationHistory = (existingMessages || []).map((item) => ({
+      role: item.sender === 'patient' ? ('user' as const) : ('model' as const),
+      content: item.content,
     }));
 
+    const { data: existingTags } = await supabase
+      .from('memory_tags')
+      .select('*')
+      .eq('user_id', userId)
+      .in('status', ['active', 'flagged', 'stopped']);
+
+    const aiResponse = audioBase64
+      ? await generateVoiceChatResponse(
+          audioBase64,
+          conversationHistory,
+          (memoryTags as MemoryTag[]) || [],
+          transcriptHint || message || ''
+        )
+      : await generateChatResponse(
+          promptOverride || message,
+          conversationHistory,
+          (memoryTags as MemoryTag[]) || []
+        );
+
     const patientMessageId = uuidv4();
-    const patientMessage: Omit<Message, 'id' | 'created_at'> & { id: string } = {
+    const patientVisibleMessage =
+      displayMessage ||
+      aiResponse.transcript ||
+      transcriptHint ||
+      message ||
+      'Voice message sent.';
+
+    const patientMessage: Omit<Message, 'created_at'> = {
       id: patientMessageId,
       user_id: userId,
       conversation_id: conversationId,
-      content: visibleMessage,
+      content: patientVisibleMessage,
       sender: 'patient',
       authority: 'ai_generated',
-      language: null,
+      language: aiResponse.language || null,
       message_type: 'chat',
-      metadata: messageMetadata || {},
+      metadata: {
+        ...(messageMetadata || {}),
+        ...(audioBase64 ? { inputMode: 'voice' } : {}),
+      },
     };
 
-    const { error: patientError } = await supabase
-      .from('messages')
-      .insert(patientMessage);
+    const { error: patientError } = await supabase.from('messages').insert(patientMessage);
 
     if (patientError) {
       console.error('Error inserting patient message:', patientError);
-      return NextResponse.json(
-        { error: 'Failed to save message' },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: 'Failed to save message' }, { status: 500 });
     }
 
     await logExperiment(supabase, {
@@ -84,23 +107,12 @@ export async function POST(request: NextRequest) {
         message_id: patientMessageId,
         sender: 'patient',
         quick_action_id: messageMetadata?.quickActionId,
+        input_mode: audioBase64 ? 'voice' : 'text',
       },
     });
 
-    const { data: existingTags } = await supabase
-      .from('memory_tags')
-      .select('*')
-      .eq('user_id', userId)
-      .in('status', ['active', 'flagged', 'stopped']);
-
-    const aiResponse = await generateChatResponse(
-      promptMessage,
-      conversationHistory,
-      memoryTags as MemoryTag[]
-    );
-
     const aiMessageId = uuidv4();
-    const aiMessage: Omit<Message, 'id' | 'created_at'> & { id: string } = {
+    const aiMessage: Omit<Message, 'created_at'> = {
       id: aiMessageId,
       user_id: userId,
       conversation_id: conversationId,
@@ -116,16 +128,11 @@ export async function POST(request: NextRequest) {
       },
     };
 
-    const { error: aiError } = await supabase
-      .from('messages')
-      .insert(aiMessage);
+    const { error: aiError } = await supabase.from('messages').insert(aiMessage);
 
     if (aiError) {
       console.error('Error inserting AI message:', aiError);
-      return NextResponse.json(
-        { error: 'Failed to save AI response' },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: 'Failed to save AI response' }, { status: 500 });
     }
 
     await logExperiment(supabase, {
@@ -167,7 +174,7 @@ export async function POST(request: NextRequest) {
 
       if (!tagError && insertedTag) {
         newTags.push(insertedTag);
-        
+
         await logExperiment(supabase, {
           event_type: 'tag_extracted',
           user_id: userId,
@@ -182,30 +189,25 @@ export async function POST(request: NextRequest) {
     }
 
     if (contradictions.length > 0) {
-      await handleContradictions(
-        supabase,
-        userId,
-        contradictions,
-        newTags
-      );
+      await handleContradictions(supabase, userId, contradictions, newTags);
     }
 
     let aiSummary = '';
     const updatedMessages = [
-      ...conversationHistory.map(h => ({ 
-        sender: h.role === 'user' ? 'patient' : 'ai', 
-        content: h.content 
+      ...conversationHistory.map((entry) => ({
+        sender: entry.role === 'user' ? 'patient' : 'ai',
+        content: entry.content,
       })),
-      { sender: 'patient', content: visibleMessage },
+      { sender: 'patient', content: patientVisibleMessage },
       { sender: 'ai', content: aiResponse.content },
     ];
-    
-    if (updatedMessages.filter(m => m.sender === 'patient').length >= 2) {
-      aiSummary = await generateTriageSummary(updatedMessages, memoryTags);
+
+    if (updatedMessages.filter((item) => item.sender === 'patient').length >= 2) {
+      aiSummary = await generateTriageSummary(updatedMessages, (memoryTags as MemoryTag[]) || []);
     }
 
-    const relevantTags = [...newTags, ...(memoryTags || [])]
-      .filter((tag: MemoryTag) => tag.status === 'active' || tag.status === 'flagged')
+    const relevantTags = [...newTags, ...(((memoryTags as MemoryTag[]) || []) as MemoryTag[])]
+      .filter((tag) => tag.status === 'active' || tag.status === 'flagged')
       .slice(0, 10);
 
     return NextResponse.json({
@@ -219,9 +221,6 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('Chat API error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

@@ -213,6 +213,8 @@ export function useChat({ userId, conversationId: initialConversationId, clinicI
       displayMessage?: string;
       promptOverride?: string;
       messageMetadata?: Record<string, unknown>;
+      audioBase64?: string;
+      transcriptHint?: string;
     }
   ) => {
     setLoading(true);
@@ -226,6 +228,8 @@ export function useChat({ userId, conversationId: initialConversationId, clinicI
           displayMessage: options?.displayMessage,
           promptOverride: options?.promptOverride,
           messageMetadata: options?.messageMetadata,
+          audioBase64: options?.audioBase64,
+          transcriptHint: options?.transcriptHint,
           conversationId,
           userId,
           memoryTags,
@@ -276,6 +280,17 @@ export function useChat({ userId, conversationId: initialConversationId, clinicI
   const sendMessage = useCallback(async (content: string) => {
     await sendChatRequest(content);
   }, [sendChatRequest]);
+
+  const sendVoiceMessage = useCallback(
+    async (audioBase64: string, transcriptHint = '') => {
+      await sendChatRequest(transcriptHint || 'Voice message', {
+        displayMessage: transcriptHint || undefined,
+        audioBase64,
+        transcriptHint,
+      });
+    },
+    [sendChatRequest]
+  );
 
   const sendProviderAction = useCallback(async (action: QuickActionOption, message: Message) => {
     await sendChatRequest(action.label, {
@@ -351,6 +366,7 @@ export function useChat({ userId, conversationId: initialConversationId, clinicI
     riskAssessment,
     careStatus,
     sendMessage,
+    sendVoiceMessage,
     sendProviderAction,
     sendAppointmentSelection,
     escalateToClinic,

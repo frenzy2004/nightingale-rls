@@ -5,7 +5,7 @@ import {
   logVerifiedAnswerInjected,
   logExperiment,
 } from '@/lib/experiment-logger';
-import { extractTags } from '@/lib/ai/gemini';
+import { extractTags } from '@/lib/ai/openai-realtime';
 import { detectContradictions } from '@/lib/ai/tag-extractor';
 import { buildProviderMessageMetadata } from '@/lib/demo';
 import { v4 as uuidv4 } from 'uuid';

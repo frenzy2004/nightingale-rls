@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient, createServiceClient } from '@/lib/supabase/server';
-import { generateTriageSummary, generateClinicianDraft } from '@/lib/ai/gemini';
+import { generateTriageSummary, generateClinicianDraft } from '@/lib/ai/openai-realtime';
 import { getRelevantTagsForEscalation } from '@/lib/ai/tag-extractor';
 import { logExperiment, logPatientEdit, logEscalationTriggered } from '@/lib/experiment-logger';
 import { getPatientEscalationLabel } from '@/lib/demo';

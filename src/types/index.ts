@@ -44,6 +44,7 @@ export interface MessageMetadata {
   riskLevel?: RiskLevel;
   riskSummary?: string;
   matchedSignals?: string[];
+  inputMode?: 'text' | 'voice';
   provider?: ProviderIdentity;
   disclaimer?: string;
   quickActions?: QuickActionOption[];

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { extractTags } from '@/lib/ai/gemini';
+import { extractTags } from '@/lib/ai/openai-realtime';
 import { detectContradictions, handleContradictions } from '@/lib/ai/tag-extractor';
 import { logExperiment } from '@/lib/experiment-logger';
 import { v4 as uuidv4 } from 'uuid';
