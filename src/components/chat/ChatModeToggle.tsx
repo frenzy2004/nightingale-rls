@@ -19,8 +19,11 @@ const MODE_COPY: Record<ChatMode, string> = {
 
 export function ChatModeToggle({ mode, onChange }: ChatModeToggleProps) {
   return (
-    <div className="border-b border-slate-200/80 bg-white/80 px-4 py-3 backdrop-blur">
+    <div className="border-b border-slate-200/80 bg-white/95 px-4 py-3 shadow-sm backdrop-blur">
       <div className="mx-auto flex max-w-3xl flex-col gap-2">
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+          Session Mode
+        </p>
         <div className="flex flex-wrap gap-2">
           <Button
             type="button"

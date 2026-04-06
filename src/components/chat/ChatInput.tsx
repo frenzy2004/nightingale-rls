@@ -239,11 +239,11 @@ export function ChatInput({
           rows={1}
         />
 
-        {mode === 'voice' && (
+        {mode !== 'image' && (
           <Button
             type="button"
             size="icon"
-            variant={recording ? 'destructive' : 'outline'}
+            variant={recording || mode === 'voice' ? 'default' : 'outline'}
             disabled={busy || !voiceSupported || !onSendVoice}
             onClick={() => {
               void handleMicToggle();
@@ -265,7 +265,7 @@ export function ChatInput({
         </Button>
       </form>
 
-      {mode === 'voice' && (recording || error || !voiceSupported) && (
+      {mode !== 'image' && (recording || error || !voiceSupported) && (
         <div className="px-4 pb-4 text-xs text-muted-foreground">
           {recording && 'Microphone is live. Tap the square to send your voice note.'}
           {!recording && error && error}

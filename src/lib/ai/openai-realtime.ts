@@ -69,6 +69,50 @@ function buildLowRiskAssessment(): RiskAssessment {
   };
 }
 
+function isDataSummaryRequest(message: string): boolean {
+  return /\b(what (data|info|information).*(got|have) on me|what do you know about me|what do you have on me|what's in my record|summari[sz]e what you know)\b/i.test(
+    message
+  );
+}
+
+function buildKnownDataResponse(memoryTags: MemoryTag[]): string {
+  const relevantTags = memoryTags
+    .filter((tag) => tag.status === 'active' || tag.status === 'flagged')
+    .slice(0, 4);
+
+  if (relevantTags.length === 0) {
+    return 'From this chat, I only know what you have shared in the conversation so far. If you want, I can help summarize your recent questions or concerns.';
+  }
+
+  const summary = relevantTags
+    .map((tag) => tag.value)
+    .join('; ');
+
+  return `From our chat, I have notes like: ${summary}. If you want, I can turn that into a short summary for you or help check if anything looks outdated.`;
+}
+
+function shouldReplaceWithConversationalFallback(
+  responseText: string,
+  userMessage: string,
+  riskAssessment: RiskAssessment
+): boolean {
+  if (riskAssessment.emergency || riskAssessment.level === 'high') {
+    return false;
+  }
+
+  const normalizedResponse = responseText.toLowerCase();
+  const normalizedUserMessage = userMessage.toLowerCase();
+  const hasReferral =
+    /\b(care team|clinic|clinician|hospital|sjmc|dr alan)\b/i.test(normalizedResponse);
+  const hasPracticalAdvice =
+    /\b(try|use|avoid|drink|rest|track|watch|moistur|wash|hydr|common|summar|from our chat|i know|you shared|paracetamol|acetaminophen)\b/i.test(
+      normalizedResponse
+    );
+  const isContextQuestion = isDataSummaryRequest(normalizedUserMessage);
+
+  return hasReferral && !hasPracticalAdvice && !isContextQuestion;
+}
+
 function buildFallbackChatResponse(userMessage: string, riskAssessment: RiskAssessment): string {
   const normalized = userMessage.toLowerCase();
 
@@ -86,6 +130,10 @@ function buildFallbackChatResponse(userMessage: string, riskAssessment: RiskAsse
 
   if (normalized.includes('nausea')) {
     return 'Try noting what time you take the tablets, what you ate, and when the nausea starts. If it keeps lasting through the morning or you cannot keep fluids down, send it to the care team today.';
+  }
+
+  if (normalized.includes('fever')) {
+    return 'Rest, drink plenty of fluids, and monitor your temperature closely. Many people use paracetamol or acetaminophen for fever if they normally tolerate it, but if the fever is very high, not settling, or comes with trouble breathing, confusion, severe pain, or dehydration, get urgent medical help.';
   }
 
   if (
@@ -478,6 +526,19 @@ export async function generateChatResponse(
   conversationHistory: ConversationEntry[],
   memoryTags: MemoryTag[]
 ): Promise<ChatResponse> {
+  if (isDataSummaryRequest(userMessage)) {
+    const riskAssessment = buildLowRiskAssessment();
+
+    return {
+      content: buildKnownDataResponse(memoryTags),
+      language: detectLanguage(userMessage),
+      isEmergency: false,
+      extractedTags: [],
+      riskAssessment,
+      shouldEscalate: false,
+    };
+  }
+
   const inputCheck = checkInputSafety(userMessage);
   const riskAssessment = assessMedicalRisk(userMessage);
 
@@ -527,7 +588,15 @@ export async function generateChatResponse(
         ? `${realtimeResponse.text} Please send this to ${DEMO_PROVIDER.clinicianName} or the ${DEMO_PROVIDER.hospitalName} care team today.`
         : realtimeResponse.text;
 
-    const validatedResponse = validateResponse(responseWithEscalationHint);
+    const preferredResponse = shouldReplaceWithConversationalFallback(
+      responseWithEscalationHint,
+      userMessage,
+      riskAssessment
+    )
+      ? buildFallbackChatResponse(userMessage, riskAssessment)
+      : responseWithEscalationHint;
+
+    const validatedResponse = validateResponse(preferredResponse);
     const extractedTags = await extractTags(userMessage);
 
     return {
@@ -558,6 +627,21 @@ export async function generateVoiceChatResponse(
   transcriptHint = ''
 ): Promise<ChatResponse> {
   const preliminaryTranscript = transcriptHint.trim();
+
+  if (preliminaryTranscript && isDataSummaryRequest(preliminaryTranscript)) {
+    const riskAssessment = buildLowRiskAssessment();
+
+    return {
+      content: buildKnownDataResponse(memoryTags),
+      language: detectLanguage(preliminaryTranscript),
+      isEmergency: false,
+      extractedTags: [],
+      riskAssessment,
+      shouldEscalate: false,
+      transcript: preliminaryTranscript,
+    };
+  }
+
   const preliminarySafety = preliminaryTranscript
     ? checkInputSafety(preliminaryTranscript)
     : { safe: true };
@@ -627,8 +711,16 @@ export async function generateVoiceChatResponse(
         ? `${realtimeResponse.text} Please send this to ${DEMO_PROVIDER.clinicianName} or the ${DEMO_PROVIDER.hospitalName} care team today.`
         : realtimeResponse.text;
 
+    const preferredResponse = shouldReplaceWithConversationalFallback(
+      responseWithEscalationHint,
+      transcript,
+      riskAssessment
+    )
+      ? buildFallbackChatResponse(transcript, riskAssessment)
+      : responseWithEscalationHint;
+
     return {
-      content: validateResponse(responseWithEscalationHint),
+      content: validateResponse(preferredResponse),
       language: transcriptLanguage,
       isEmergency: false,
       extractedTags: transcript ? await extractTags(transcript) : [],
