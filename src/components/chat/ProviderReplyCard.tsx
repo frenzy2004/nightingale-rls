@@ -80,7 +80,7 @@ export function ProviderReplyCard({
               <span>Options</span>
             </div>
             <p className="mt-1 text-xs leading-5 text-slate-500">
-              Tap a button to ask Nightingale to explain or break down this clinician reply.
+              Tap a button to ask Nightingale to explain or break down this SJMC Cares response.
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
               {quickActions.map((action) => (

@@ -59,7 +59,7 @@ export function ChatBubble({
 
   const getSenderLabel = () => {
     if (isPatient) return 'You';
-    if (isClinician) return 'Clinician';
+    if (isClinician) return isVerified ? 'SJMC Cares Response' : 'SJMC Care Team';
     return 'Nightingale AI';
   };
 
@@ -77,23 +77,25 @@ export function ChatBubble({
           isPatient ? 'items-end' : 'items-start'
         )}
       >
-        <div className="flex items-center gap-2 mb-1">
-          <span className="text-xs font-medium text-muted-foreground">
-            {getSenderLabel()}
-          </span>
-          {isVerified && (
-            <Badge variant="secondary" className="text-xs py-0 px-1.5 bg-orange-100 text-orange-700">
-              <Shield className="h-3 w-3 mr-1" />
-              Verified
-            </Badge>
-          )}
-          {isPatient && isImageInput && (
-            <Badge variant="outline" className="text-xs py-0 px-1.5">
-              <Image className="mr-1 h-3 w-3" />
-              Image
-            </Badge>
-          )}
-        </div>
+        {!isProviderCard && (
+          <div className="mb-1 flex items-center gap-2">
+            <span className="text-xs font-medium text-muted-foreground">
+              {getSenderLabel()}
+            </span>
+            {isVerified && (
+              <Badge variant="secondary" className="bg-orange-100 px-1.5 py-0 text-xs text-orange-700">
+                <Shield className="mr-1 h-3 w-3" />
+                Verified
+              </Badge>
+            )}
+            {isPatient && isImageInput && (
+              <Badge variant="outline" className="px-1.5 py-0 text-xs">
+                <Image className="mr-1 h-3 w-3" />
+                Image
+              </Badge>
+            )}
+          </div>
+        )}
         {isProviderCard ? (
           <ProviderReplyCard
             message={message}
