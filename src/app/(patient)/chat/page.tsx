@@ -26,7 +26,7 @@ export default function ChatPage() {
   const [isContextOpen, setIsContextOpen] = useState(true);
   const [showEditModal, setShowEditModal] = useState(false);
   const [chatMode, setChatMode] = useState<ChatMode>('text');
-  const messagesViewportRef = useRef<HTMLDivElement>(null);
+  const chatScrollViewportRef = useRef<HTMLDivElement>(null);
 
   const {
     messages,
@@ -51,13 +51,13 @@ export default function ChatPage() {
   });
 
   useEffect(() => {
-    const messagesViewport = messagesViewportRef.current;
-    if (!messagesViewport) {
+    const chatScrollViewport = chatScrollViewportRef.current;
+    if (!chatScrollViewport) {
       return;
     }
 
-    messagesViewport.scrollTo({
-      top: messagesViewport.scrollHeight,
+    chatScrollViewport.scrollTo({
+      top: chatScrollViewport.scrollHeight,
       behavior: initialLoading ? 'auto' : 'smooth',
     });
   }, [messages, initialLoading]);
@@ -130,71 +130,73 @@ export default function ChatPage() {
       <div className="flex min-h-0 flex-1 overflow-hidden">
         {/* Main Chat Area */}
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <ChatModeToggle mode={chatMode} onChange={setChatMode} />
-          <HighRiskBanner riskAssessment={riskAssessment} />
-          <CareStatusTracker escalation={careStatus} />
-
           <div
-            ref={messagesViewportRef}
+            ref={chatScrollViewportRef}
             className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
           >
-            <div className="mx-auto w-full max-w-3xl">
-              {initialLoading ? (
-                <div className="flex items-center justify-center h-full py-20">
-                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                </div>
-              ) : messages.length === 0 ? (
-                <div className="px-4 py-10 text-center md:py-12">
-                  <div className="mx-auto mb-4 w-fit rounded-full bg-primary/10 p-4">
-                    <Bird className="h-12 w-12 text-primary" />
+            <div className="pb-4">
+              <ChatModeToggle mode={chatMode} onChange={setChatMode} />
+              <HighRiskBanner riskAssessment={riskAssessment} />
+              <CareStatusTracker escalation={careStatus} />
+
+              <div className="mx-auto w-full max-w-3xl">
+                {initialLoading ? (
+                  <div className="flex h-full items-center justify-center py-20">
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                   </div>
-                  <h2 className="text-xl font-semibold mb-2">Welcome to Nightingale</h2>
-                  <p className="mx-auto max-w-md text-muted-foreground">
-                    Short, careful answers for everyday questions, with a direct path to the {DEMO_PROVIDER.hospitalName} care team when you want a verified reply.
-                  </p>
-                  <div className="mt-6 space-y-2 text-sm text-muted-foreground">
-                    <p>Try asking me:</p>
-                    <div className="flex flex-wrap gap-2 justify-center">
-                      {[
-                        'How should I get ready for my biopsy?',
-                        'What should I watch for after treatment?',
-                        'Can I send this to my care team?',
-                      ].map((suggestion) => (
-                        <button
-                          key={suggestion}
-                          onClick={() => sendMessage(suggestion)}
-                          className="rounded-full bg-white px-3 py-1.5 shadow-sm ring-1 ring-slate-200 transition-colors hover:bg-muted/80"
-                        >
-                          {suggestion}
-                        </button>
-                      ))}
+                ) : messages.length === 0 ? (
+                  <div className="px-4 py-10 text-center md:py-12">
+                    <div className="mx-auto mb-4 w-fit rounded-full bg-primary/10 p-4">
+                      <Bird className="h-12 w-12 text-primary" />
                     </div>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  {messages.map((message) => (
-                    <ChatBubble
-                      key={message.id}
-                      message={message}
-                      onQuickAction={sendProviderAction}
-                      onAppointmentSelect={sendAppointmentSelection}
-                    />
-                  ))}
-                  {loading && (
-                    <div className="flex gap-3 p-4">
-                      <div className="h-8 w-8 rounded-full bg-purple-100 flex items-center justify-center">
-                        <Bird className="h-4 w-4 text-purple-600" />
-                      </div>
-                      <div className="flex items-center gap-1 px-4 py-2 bg-muted rounded-2xl">
-                        <span className="w-2 h-2 bg-muted-foreground/40 rounded-full animate-bounce" />
-                        <span className="w-2 h-2 bg-muted-foreground/40 rounded-full animate-bounce [animation-delay:0.2s]" />
-                        <span className="w-2 h-2 bg-muted-foreground/40 rounded-full animate-bounce [animation-delay:0.4s]" />
+                    <h2 className="mb-2 text-xl font-semibold">Welcome to Nightingale</h2>
+                    <p className="mx-auto max-w-md text-muted-foreground">
+                      Short, careful answers for everyday questions, with a direct path to the {DEMO_PROVIDER.hospitalName} care team when you want a verified reply.
+                    </p>
+                    <div className="mt-6 space-y-2 text-sm text-muted-foreground">
+                      <p>Try asking me:</p>
+                      <div className="flex flex-wrap justify-center gap-2">
+                        {[
+                          'How should I get ready for my biopsy?',
+                          'What should I watch for after treatment?',
+                          'Can I send this to my care team?',
+                        ].map((suggestion) => (
+                          <button
+                            key={suggestion}
+                            onClick={() => sendMessage(suggestion)}
+                            className="rounded-full bg-white px-3 py-1.5 shadow-sm ring-1 ring-slate-200 transition-colors hover:bg-muted/80"
+                          >
+                            {suggestion}
+                          </button>
+                        ))}
                       </div>
                     </div>
-                  )}
-                </>
-              )}
+                  </div>
+                ) : (
+                  <>
+                    {messages.map((message) => (
+                      <ChatBubble
+                        key={message.id}
+                        message={message}
+                        onQuickAction={sendProviderAction}
+                        onAppointmentSelect={sendAppointmentSelection}
+                      />
+                    ))}
+                    {loading && (
+                      <div className="flex gap-3 p-4">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-purple-100">
+                          <Bird className="h-4 w-4 text-purple-600" />
+                        </div>
+                        <div className="flex items-center gap-1 rounded-2xl bg-muted px-4 py-2">
+                          <span className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground/40" />
+                          <span className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground/40 [animation-delay:0.2s]" />
+                          <span className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground/40 [animation-delay:0.4s]" />
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
             </div>
           </div>
 
