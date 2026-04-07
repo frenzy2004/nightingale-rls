@@ -26,12 +26,6 @@ export default function HomePage() {
           <p className="mb-4 text-sm font-semibold uppercase tracking-[0.24em] text-emerald-700">
             Asia OneHealthCare at {DEMO_PROVIDER.hospitalName}
           </p>
-          <h1 className="text-5xl font-bold tracking-tight mb-6">
-            Patient chat that reaches a real care team
-          </h1>
-          <p className="text-xl text-muted-foreground mb-8">
-            Short AI guidance for everyday questions, then a clean handoff to {DEMO_PROVIDER.clinicianName} and the {DEMO_PROVIDER.hospitalName} team when you need a verified answer.
-          </p>
           <div className="flex gap-4 justify-center">
             <Link href="/register">
               <Button size="lg" className="gap-2">

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 import { ReplyEditor } from '@/components/clinic/ReplyEditor';
 import { useUser } from '@/hooks/useUser';
+import { DEFAULT_APPOINTMENT_OPTIONS } from '@/lib/demo';
 import { createClient } from '@/lib/supabase/client';
 import type { DiffEntry, Escalation, PatientProfile } from '@/types';
 
@@ -121,7 +122,11 @@ export default function ReplyPage({ params }: PageProps) {
     }
   };
 
-  const handleSendReply = async (reply: string, diffLog: DiffEntry[]) => {
+  const handleSendReply = async (
+    reply: string,
+    diffLog: DiffEntry[],
+    options: { includeAppointmentSlots: boolean }
+  ) => {
     if (!escalation || !user) {
       return;
     }
@@ -136,6 +141,9 @@ export default function ReplyPage({ params }: PageProps) {
           aiDraft,
           finalReply: reply,
           diffLog,
+          metadata: options.includeAppointmentSlots
+            ? { appointmentOptions: DEFAULT_APPOINTMENT_OPTIONS }
+            : undefined,
         }),
       });
 

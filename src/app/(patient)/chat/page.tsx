@@ -16,13 +16,14 @@ import { PatientSafetyFooter } from '@/components/chat/PatientSafetyFooter';
 import { BrandMark } from '@/components/brand/BrandMark';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Bird, Menu, LogOut, Tag, X, Loader2 } from 'lucide-react';
+import { Bird, ChevronLeft, ChevronRight, Menu, LogOut, X, Loader2 } from 'lucide-react';
 import { DEMO_PROVIDER } from '@/lib/demo';
 
 export default function ChatPage() {
   const { user, loading: userLoading, signOut } = useUser();
   const router = useRouter();
   const [showSidebar, setShowSidebar] = useState(false);
+  const [isContextOpen, setIsContextOpen] = useState(true);
   const [showEditModal, setShowEditModal] = useState(false);
   const [chatMode, setChatMode] = useState<ChatMode>('text');
   const scrollEndRef = useRef<HTMLDivElement>(null);
@@ -95,16 +96,22 @@ export default function ChatPage() {
             size="icon"
             onClick={() => setShowSidebar(!showSidebar)}
             className="md:hidden"
+            aria-label={showSidebar ? 'Hide patient context' : 'Show patient context'}
           >
             {showSidebar ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </Button>
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => setShowSidebar(!showSidebar)}
+            onClick={() => setIsContextOpen((value) => !value)}
             className="hidden md:flex"
+            aria-label={isContextOpen ? 'Collapse patient context' : 'Expand patient context'}
           >
-            <Tag className="h-5 w-5" />
+            {isContextOpen ? (
+              <ChevronRight className="h-5 w-5" />
+            ) : (
+              <ChevronLeft className="h-5 w-5" />
+            )}
           </Button>
           <Button variant="ghost" size="icon" onClick={handleSignOut}>
             <LogOut className="h-5 w-5" />
@@ -206,14 +213,11 @@ export default function ChatPage() {
           />
         </div>
 
-        {/* Sidebar - Memory Tags */}
         <aside
           className={`
-            ${showSidebar ? 'translate-x-0' : 'translate-x-full md:translate-x-0'}
-            fixed md:relative right-0 top-0 h-full w-[24rem] bg-card border-l
-            transition-transform duration-300 ease-in-out z-40
-            md:block
-            ${showSidebar ? 'block' : 'hidden md:block'}
+            fixed right-0 top-0 z-40 h-full w-[24rem] max-w-[calc(100vw-1rem)] border-l bg-card
+            transition-transform duration-300 ease-in-out md:hidden
+            ${showSidebar ? 'translate-x-0' : 'translate-x-full'}
           `}
         >
           <div className="p-4 border-b md:hidden">
@@ -225,6 +229,22 @@ export default function ChatPage() {
             </div>
           </div>
           <MemoryTagsPanel tags={memoryTags} profile={patientProfile} className="h-full" />
+        </aside>
+
+        <aside
+          className={`
+            hidden border-l border-slate-200/80 bg-card transition-[width,border-color] duration-300 ease-in-out md:block
+            ${isContextOpen ? 'w-[24rem]' : 'w-0 border-l-transparent'}
+          `}
+        >
+          <div
+            className={`
+              h-full overflow-hidden transition-opacity duration-200
+              ${isContextOpen ? 'opacity-100' : 'pointer-events-none opacity-0'}
+            `}
+          >
+            <MemoryTagsPanel tags={memoryTags} profile={patientProfile} className="h-full" />
+          </div>
         </aside>
       </div>
 

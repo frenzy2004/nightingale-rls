@@ -31,7 +31,7 @@ export function ProviderReplyCard({
   const title =
     message.message_type === 'consult_summary'
       ? 'Consult Summary'
-      : 'Clinician Verified Response';
+      : 'SJMC Cares Response';
 
   return (
     <Card className="max-w-[85%] overflow-hidden border-orange-200 bg-orange-50/80 shadow-sm">

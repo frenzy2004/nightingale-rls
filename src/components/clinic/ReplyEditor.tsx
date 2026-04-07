@@ -21,7 +21,11 @@ import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
-import { DEMO_PROVIDER, getClinicEscalationLabel } from '@/lib/demo';
+import {
+  DEFAULT_APPOINTMENT_OPTIONS,
+  DEMO_PROVIDER,
+  getClinicEscalationLabel,
+} from '@/lib/demo';
 import type { DiffEntry, Escalation, MemoryTag, PatientProfile } from '@/types';
 
 interface ReplyEditorProps {
@@ -30,7 +34,11 @@ interface ReplyEditorProps {
   patientProfile?: PatientProfile | null;
   onRegenerateDraft: () => void;
   draftLoading?: boolean;
-  onSend: (reply: string, diffLog: DiffEntry[]) => void;
+  onSend: (
+    reply: string,
+    diffLog: DiffEntry[],
+    options: { includeAppointmentSlots: boolean }
+  ) => void;
   onBack: () => void;
   loading?: boolean;
 }
@@ -47,6 +55,7 @@ export function ReplyEditor({
 }: ReplyEditorProps) {
   const [reply, setReply] = useState(aiDraft);
   const [showDiff, setShowDiff] = useState(false);
+  const [includeAppointmentSlots, setIncludeAppointmentSlots] = useState(false);
   const contextTags = escalation.context_snapshot as MemoryTag[];
 
   useEffect(() => {
@@ -62,7 +71,9 @@ export function ReplyEditor({
   };
 
   const handleSend = () => {
-    onSend(reply, getDiffLog());
+    onSend(reply, getDiffLog(), {
+      includeAppointmentSlots,
+    });
   };
 
   const handleReset = () => {
@@ -222,6 +233,44 @@ export function ReplyEditor({
               Edit the AI-generated draft before sending. The verified response will appear back in
               the patient messenger with your provider details attached.
             </p>
+
+            <div className="rounded-2xl border border-teal-200 bg-teal-50/80 p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-medium text-slate-900">Book Appointment</p>
+                  <p className="mt-1 text-xs leading-5 text-slate-600">
+                    Add suggested slots so the patient can tap a time directly from the verified
+                    response.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant={includeAppointmentSlots ? 'default' : 'outline'}
+                  size="sm"
+                  className={
+                    includeAppointmentSlots
+                      ? 'bg-teal-700 text-white hover:bg-teal-800'
+                      : 'border-teal-200 bg-white text-teal-800 hover:bg-teal-100'
+                  }
+                  onClick={() => setIncludeAppointmentSlots((value) => !value)}
+                >
+                  {includeAppointmentSlots ? 'Included' : 'Add slots'}
+                </Button>
+              </div>
+
+              {includeAppointmentSlots && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {DEFAULT_APPOINTMENT_OPTIONS.map((option) => (
+                    <Badge
+                      key={option.id}
+                      className="rounded-full bg-teal-700 px-2.5 text-xs text-white hover:bg-teal-700"
+                    >
+                      {option.label}
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </ScrollArea>
