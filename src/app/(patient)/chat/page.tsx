@@ -26,7 +26,7 @@ export default function ChatPage() {
   const [isContextOpen, setIsContextOpen] = useState(true);
   const [showEditModal, setShowEditModal] = useState(false);
   const [chatMode, setChatMode] = useState<ChatMode>('text');
-  const scrollEndRef = useRef<HTMLDivElement>(null);
+  const messagesViewportRef = useRef<HTMLDivElement>(null);
 
   const {
     messages,
@@ -51,8 +51,16 @@ export default function ChatPage() {
   });
 
   useEffect(() => {
-    scrollEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    const messagesViewport = messagesViewportRef.current;
+    if (!messagesViewport) {
+      return;
+    }
+
+    messagesViewport.scrollTo({
+      top: messagesViewport.scrollHeight,
+      behavior: initialLoading ? 'auto' : 'smooth',
+    });
+  }, [messages, initialLoading]);
 
   useEffect(() => {
     if (!userLoading && !user) {
@@ -81,9 +89,9 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-[radial-gradient(circle_at_top,_rgba(15,108,93,0.12),_transparent_40%),linear-gradient(180deg,#f8fbfb_0%,#fdfdfc_100%)]">
+    <div className="fixed inset-0 flex min-h-0 flex-col overflow-hidden bg-[radial-gradient(circle_at_top,_rgba(15,108,93,0.12),_transparent_40%),linear-gradient(180deg,#f8fbfb_0%,#fdfdfc_100%)]">
       {/* Header */}
-      <header className="sticky top-0 z-20 flex items-center justify-between border-b border-slate-200/80 bg-white/90 px-4 py-3 backdrop-blur">
+      <header className="sticky top-0 z-20 flex shrink-0 items-center justify-between border-b border-slate-200/80 bg-white/90 px-4 py-3 backdrop-blur">
         <div className="flex items-center gap-3">
           <BrandMark compact />
         </div>
@@ -119,21 +127,24 @@ export default function ChatPage() {
         </div>
       </header>
 
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex min-h-0 flex-1 overflow-hidden">
         {/* Main Chat Area */}
-        <div className="flex-1 flex flex-col">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           <ChatModeToggle mode={chatMode} onChange={setChatMode} />
           <HighRiskBanner riskAssessment={riskAssessment} />
           <CareStatusTracker escalation={careStatus} />
 
-          <div className="flex-1 overflow-y-auto">
-            <div className="max-w-3xl mx-auto">
+          <div
+            ref={messagesViewportRef}
+            className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
+          >
+            <div className="mx-auto w-full max-w-3xl">
               {initialLoading ? (
                 <div className="flex items-center justify-center h-full py-20">
                   <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                 </div>
               ) : messages.length === 0 ? (
-                <div className="px-4 py-20 text-center">
+                <div className="px-4 py-10 text-center md:py-12">
                   <div className="mx-auto mb-4 w-fit rounded-full bg-primary/10 p-4">
                     <Bird className="h-12 w-12 text-primary" />
                   </div>
@@ -182,7 +193,6 @@ export default function ChatPage() {
                       </div>
                     </div>
                   )}
-                  <div ref={scrollEndRef} />
                 </>
               )}
             </div>
@@ -233,7 +243,7 @@ export default function ChatPage() {
 
         <aside
           className={`
-            hidden border-l border-slate-200/80 bg-card transition-[width,border-color] duration-300 ease-in-out md:block
+            hidden min-h-0 border-l border-slate-200/80 bg-card transition-[width,border-color] duration-300 ease-in-out md:block
             ${isContextOpen ? 'w-[24rem]' : 'w-0 border-l-transparent'}
           `}
         >
