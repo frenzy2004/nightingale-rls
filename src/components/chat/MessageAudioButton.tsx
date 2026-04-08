@@ -97,7 +97,9 @@ export function MessageAudioButton({
       setErrorMessage(null);
     } catch (error) {
       console.error('Audio playback failed:', error);
-      setErrorMessage('Audio unavailable');
+      setErrorMessage(
+        error instanceof Error ? error.message : 'Audio unavailable'
+      );
       setIsPlaying(false);
     }
   }, [audioUrl, fetchAudio]);
