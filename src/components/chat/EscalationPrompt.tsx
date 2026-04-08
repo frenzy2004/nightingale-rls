@@ -16,10 +16,11 @@ export function EscalationPrompt({ onAccept, onDismiss }: EscalationPromptProps)
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1">
             <h4 className="font-medium text-amber-800 dark:text-amber-200">
-              Would you like to send this to your clinic?
+              This needs a care-team answer
             </h4>
             <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
-              The care team can review your exact question and send a verified response back into this same chat.
+              Time-sensitive clinical or procedural questions are routed to your care team for a
+              verified reply in this same thread.
             </p>
           </div>
           <div className="flex gap-2">
@@ -40,7 +41,7 @@ export function EscalationPrompt({ onAccept, onDismiss }: EscalationPromptProps)
             className="bg-amber-600 hover:bg-amber-700 text-white"
           >
             <Send className="h-4 w-4 mr-2" />
-            Send to Clinic
+            Send to care team
           </Button>
           <Button
             variant="outline"

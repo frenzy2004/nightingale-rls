@@ -166,6 +166,25 @@ function addItem(
   registry.set(section, [...existingItems, item]);
 }
 
+function formatPreferredLanguage(language: string): string {
+  const normalized = language.trim().toLowerCase();
+
+  switch (normalized) {
+    case 'id':
+    case 'bahasa':
+    case 'bahasa indonesia':
+      return 'Bahasa Indonesia';
+    case 'en':
+      return 'English';
+    case 'zh':
+      return 'Chinese';
+    case 'ta':
+      return 'Tamil';
+    default:
+      return language;
+  }
+}
+
 export function buildPatientContextSections(
   tags: MemoryTag[],
   profile?: PatientProfile | null
@@ -270,7 +289,7 @@ export function buildPatientContextSections(
     if (profile.preferred_language) {
       addItem(registry, 'considerations', {
         id: `profile-language-${profile.user_id}`,
-        value: `Preferred language: ${profile.preferred_language.toUpperCase()}`,
+        value: `Preferred language: ${formatPreferredLanguage(profile.preferred_language)}`,
         tags: ['#language'],
         status: 'profile',
         authority: 'emr_profile',

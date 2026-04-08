@@ -37,12 +37,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const draft = await generateClinicianDraft(
+    const draftResult = await generateClinicianDraft(
       question,
       contextSnapshot as MemoryTag[] || []
     );
 
-    return NextResponse.json({ draft });
+    return NextResponse.json(draftResult);
   } catch (error) {
     console.error('Draft generation error:', error);
     return NextResponse.json(

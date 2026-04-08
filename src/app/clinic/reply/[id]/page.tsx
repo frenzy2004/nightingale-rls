@@ -7,13 +7,19 @@ import { ReplyEditor } from '@/components/clinic/ReplyEditor';
 import { useUser } from '@/hooks/useUser';
 import { DEFAULT_APPOINTMENT_OPTIONS } from '@/lib/demo';
 import { createClient } from '@/lib/supabase/client';
-import type { DiffEntry, Escalation, PatientProfile } from '@/types';
+import type { DiffEntry, Escalation, GroundingSource, PatientProfile } from '@/types';
 
 interface PageProps {
   params: Promise<{ id: string }>;
 }
 
-async function requestDraft(question: string, contextSnapshot: unknown) {
+interface DraftResponse {
+  draft: string;
+  groundedBySearch: boolean;
+  sources: GroundingSource[];
+}
+
+async function requestDraft(question: string, contextSnapshot: unknown): Promise<DraftResponse> {
   const response = await fetch('/api/reply/draft', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -28,7 +34,11 @@ async function requestDraft(question: string, contextSnapshot: unknown) {
   }
 
   const data = await response.json();
-  return data.draft || '';
+  return {
+    draft: data.draft || '',
+    groundedBySearch: Boolean(data.groundedBySearch),
+    sources: (data.sources || []) as GroundingSource[],
+  };
 }
 
 export default function ReplyPage({ params }: PageProps) {
@@ -38,6 +48,8 @@ export default function ReplyPage({ params }: PageProps) {
   const [escalation, setEscalation] = useState<Escalation | null>(null);
   const [patientProfile, setPatientProfile] = useState<PatientProfile | null>(null);
   const [aiDraft, setAiDraft] = useState('');
+  const [draftSources, setDraftSources] = useState<GroundingSource[]>([]);
+  const [draftGrounded, setDraftGrounded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [draftLoading, setDraftLoading] = useState(false);
@@ -76,7 +88,7 @@ export default function ReplyPage({ params }: PageProps) {
         setEscalation(esc);
         setDraftLoading(true);
 
-        const [draft, patientResponse] = await Promise.all([
+        const [draftResult, patientResponse] = await Promise.all([
           requestDraft(esc.patient_edited_question, esc.context_snapshot),
           fetch(`/api/patients/${esc.patient_id}`),
         ]);
@@ -85,7 +97,9 @@ export default function ReplyPage({ params }: PageProps) {
           await createClient().from('escalations').update({ status: 'in_progress' }).eq('id', id);
         }
 
-        setAiDraft(draft);
+        setAiDraft(draftResult.draft);
+        setDraftSources(draftResult.sources);
+        setDraftGrounded(draftResult.groundedBySearch);
 
         if (patientResponse.ok) {
           const patientData = await patientResponse.json();
@@ -110,11 +124,13 @@ export default function ReplyPage({ params }: PageProps) {
 
     setDraftLoading(true);
     try {
-      const draft = await requestDraft(
+      const draftResult = await requestDraft(
         escalation.patient_edited_question,
         escalation.context_snapshot
       );
-      setAiDraft(draft);
+      setAiDraft(draftResult.draft);
+      setDraftSources(draftResult.sources);
+      setDraftGrounded(draftResult.groundedBySearch);
     } catch (error) {
       console.error('Error regenerating draft:', error);
     } finally {
@@ -172,6 +188,8 @@ export default function ReplyPage({ params }: PageProps) {
       <ReplyEditor
         escalation={escalation as Escalation & { patient?: { full_name: string; email: string } }}
         aiDraft={aiDraft}
+        draftGrounded={draftGrounded}
+        draftSources={draftSources}
         patientProfile={patientProfile}
         onRegenerateDraft={handleRegenerateDraft}
         draftLoading={draftLoading}

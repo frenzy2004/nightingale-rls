@@ -270,13 +270,14 @@ export function useChat({ userId, conversationId: initialConversationId, clinicI
       setRiskAssessment(data.riskAssessment || null);
 
       const escalationShouldShow =
-        Boolean(data.shouldEscalate) || newTurnCount >= ESCALATION_TURN_THRESHOLD;
+        !data.deferEscalationPrompt &&
+        (Boolean(data.shouldEscalate) || newTurnCount >= ESCALATION_TURN_THRESHOLD);
 
       if (escalationShouldShow && !showEscalationPrompt) {
         setShowEscalationPrompt(true);
         setPendingEscalation({
-          question: options?.displayMessage || content,
-          aiSummary: data.aiSummary || '',
+          question: data.escalationQuestionDraft || options?.displayMessage || content,
+          aiSummary: data.escalationSummary || data.aiSummary || '',
           contextSnapshot: data.relevantTags || memoryTags.slice(0, 10),
           conversationId,
           riskAssessment: data.riskAssessment || null,

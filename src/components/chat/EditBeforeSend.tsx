@@ -49,10 +49,10 @@ export function EditBeforeSend({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Edit2 className="h-5 w-5" />
-            Review Before Sending
+            Send To Care Team
           </DialogTitle>
           <DialogDescription>
-            Review and edit your question before sending it to your clinic.
+            Review the question and context that will be shared with your care team.
           </DialogDescription>
         </DialogHeader>
 
@@ -68,16 +68,18 @@ export function EditBeforeSend({
                 placeholder="Edit your question..."
               />
               <p className="text-xs text-muted-foreground">
-                This is the exact question the {DEMO_PROVIDER.hospitalName} care team will receive. You can edit it before anything is sent.
+                This is the exact question the {DEMO_PROVIDER.hospitalName} care team will receive.
+                You can edit it before anything is sent.
               </p>
             </div>
 
             <Separator />
 
             <div className="space-y-2">
-              <Label>AI Summary</Label>
+              <Label>Clinical Summary</Label>
               <div className="p-3 bg-muted rounded-lg text-sm">
-                {aiSummary || 'Patient would like a verified answer from the care team, with the tagged context below attached for review.'}
+                {aiSummary ||
+                  'The care team will receive your question with the tagged context below so they can review it quickly.'}
               </div>
               <p className="text-xs text-muted-foreground">
                 This summary helps the clinician understand your concern quickly. Their reply will appear back in this thread.
@@ -90,7 +92,7 @@ export function EditBeforeSend({
                 <div className="space-y-2">
                   <Label className="flex items-center gap-2">
                     <Tag className="h-4 w-4" />
-                    Relevant Health Context
+                    Shared Patient Context
                   </Label>
                   <div className="space-y-2">
                     {contextSnapshot.map((tag) => (
@@ -118,7 +120,8 @@ export function EditBeforeSend({
                     ))}
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    This context will be shared with the clinician to help them provide a faster, more informed response.
+                    This context will be shared with the clinician so they do not miss the timing,
+                    symptoms, or language preference behind your question.
                   </p>
                 </div>
               </>
@@ -132,7 +135,7 @@ export function EditBeforeSend({
           </Button>
           <Button onClick={handleSend} disabled={!editedQuestion.trim()}>
             <Send className="h-4 w-4 mr-2" />
-            Send to Clinic
+            Send to care team
           </Button>
         </DialogFooter>
       </DialogContent>

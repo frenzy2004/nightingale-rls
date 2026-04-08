@@ -235,6 +235,9 @@ export async function POST(request: NextRequest) {
       relevantTags,
       riskAssessment: aiResponse.riskAssessment,
       shouldEscalate: aiResponse.shouldEscalate,
+      deferEscalationPrompt: aiResponse.deferEscalationPrompt || false,
+      escalationQuestionDraft: aiResponse.escalationQuestionDraft || null,
+      escalationSummary: aiResponse.escalationSummary || null,
     });
   } catch (error) {
     console.error('Chat API error:', error);

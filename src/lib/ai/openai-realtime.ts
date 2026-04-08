@@ -14,9 +14,20 @@ import {
   validateResponse,
 } from './guardrails';
 import { redactPHI } from './phi-redaction';
-import { buildWebGroundingPrompt, getTrustedWebGrounding } from './web-grounding';
+import {
+  buildClinicianGroundingPrompt,
+  buildWebGroundingPrompt,
+  getClinicianDraftGrounding,
+  getTrustedWebGrounding,
+} from './web-grounding';
 import { DEMO_PROVIDER } from '@/lib/demo';
-import type { MemoryTag, RiskAssessment, SourceReference, TagExtractionResult } from '@/types';
+import type {
+  GroundingSource,
+  MemoryTag,
+  RiskAssessment,
+  SourceReference,
+  TagExtractionResult,
+} from '@/types';
 
 const azureRealtimeKey = process.env.AZURE_OPENAI_API_KEY || '';
 const azureRealtimeEndpoints = [
@@ -40,11 +51,20 @@ interface ChatResponseBase {
   extractedTags: TagExtractionResult[];
   riskAssessment: RiskAssessment;
   shouldEscalate: boolean;
+  deferEscalationPrompt?: boolean;
+  escalationQuestionDraft?: string;
+  escalationSummary?: string;
 }
 
 export interface ChatResponse extends ChatResponseBase {
   transcript?: string;
   sources?: SourceReference[];
+}
+
+export interface ClinicianDraftResult {
+  draft: string;
+  groundedBySearch: boolean;
+  sources: GroundingSource[];
 }
 
 interface RealtimeSessionOptions {
@@ -69,6 +89,247 @@ function buildLowRiskAssessment(): RiskAssessment {
     summary: 'No deterministic high-risk signals detected.',
     emergency: false,
     escalationRecommended: false,
+  };
+}
+
+interface FeverTriageState {
+  chestPain: boolean | null;
+  breathingDifficulty: boolean | null;
+  feverStart: string | null;
+  temperature: string | null;
+}
+
+function extractTemperatureValue(text: string): string | null {
+  const match = text.match(/\b(\d{2}(?:\.\d)?)\s*[CF]?\b/i);
+  return match?.[1] || null;
+}
+
+function hasUpcomingProcedureContext(userMessage: string, memoryTags: MemoryTag[]): boolean {
+  if (/\b(biopsy|biopsi|procedure|prosedur)\b/i.test(userMessage)) {
+    return true;
+  }
+
+  return memoryTags.some(
+    (tag) =>
+      tag.tags.includes('#procedure') &&
+      /\b(biopsy|biopsi|procedure|prosedur)\b/i.test(tag.value)
+  );
+}
+
+function hasFeverLanguage(text: string): boolean {
+  return /\b(fever|temperature|demam|suhu)\b/i.test(text);
+}
+
+function detectAffirmedSymptom(text: string, patterns: RegExp[], negatedPatterns: RegExp[]): boolean | null {
+  if (!patterns.some((pattern) => pattern.test(text))) {
+    return null;
+  }
+
+  if (negatedPatterns.some((pattern) => pattern.test(text))) {
+    return false;
+  }
+
+  return true;
+}
+
+function extractFeverStart(text: string): string | null {
+  const normalized = text.trim();
+  const explicitMatch =
+    normalized.match(/\b(?:started|begin|began|since)\s+([^.!?]+)/i) ||
+    normalized.match(/\b(?:mulai|sejak)\s+([^.!?]+)/i);
+
+  if (explicitMatch?.[1]) {
+    return explicitMatch[1].trim();
+  }
+
+  if (/\b(tonight|this evening|this afternoon|this morning|last night)\b/i.test(normalized)) {
+    const timing =
+      normalized.match(/\b(tonight|this evening|this afternoon|this morning|last night)\b/i)?.[1];
+    return timing || null;
+  }
+
+  if (/\b(malam ini|tadi malam|pagi ini|sore ini|siang ini)\b/i.test(normalized)) {
+    const timing =
+      normalized.match(/\b(malam ini|tadi malam|pagi ini|sore ini|siang ini)\b/i)?.[1];
+    return timing || null;
+  }
+
+  return null;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function extractTemperature(text: string): string | null {
+  const match = text.match(/\b(\d{2}(?:\.\d)?)\s*°?\s*[CF]?\b/i);
+  return match?.[1] || null;
+}
+
+function extractFeverTriageState(
+  userMessage: string,
+  conversationHistory: ConversationEntry[]
+): FeverTriageState {
+  const recentContext = [...conversationHistory, { role: 'user' as const, content: userMessage }]
+    .slice(-6)
+    .map((entry) => entry.content)
+    .join(' ');
+
+  return {
+    chestPain: detectAffirmedSymptom(
+      recentContext,
+      [/\bchest pain\b/i, /\bnyeri dada\b/i],
+      [/\b(no|not|without)\s+(any\s+)?chest pain\b/i, /\b(tidak|tak)\s+ada\s+nyeri\s+dada\b/i]
+    ),
+    breathingDifficulty: detectAffirmedSymptom(
+      recentContext,
+      [/\b(difficulty breathing|shortness of breath|breathless|trouble breathing)\b/i, /\b(sesak napas|sukar bernapas)\b/i],
+      [
+        /\b(no|not|without)\s+(any\s+)?(difficulty breathing|shortness of breath|breathless|trouble breathing)\b/i,
+        /\b(tidak|tak)\s+ada\s+(sesak napas|sukar bernapas)\b/i,
+      ]
+    ),
+    feverStart: extractFeverStart(recentContext),
+    temperature: extractTemperatureValue(recentContext),
+  };
+}
+
+function buildFeverFollowUpQuestions(language: string): string {
+  if (language === 'id') {
+    return 'Sebelum saya bantu teruskan ini dengan aman: apakah ada nyeri dada? Apakah ada sesak napas? Demamnya mulai kapan?';
+  }
+
+  return 'Before I help route this safely: are you having any chest pain? Any difficulty breathing? When did the fever start?';
+}
+
+function buildReadyToEscalateResponse(language: string): string {
+  if (language === 'id') {
+    return `Karena ini bisa memengaruhi biopsi Anda besok, pertanyaan ini perlu ditinjau tim ${DEMO_PROVIDER.hospitalName}. Saya bisa kirimkan pertanyaan Anda sekarang beserta ringkasan demam, waktu mulai, dan jawaban keselamatan Anda.`;
+  }
+
+  return `Because this could affect tomorrow's biopsy, this needs a ${DEMO_PROVIDER.hospitalName} care-team review rather than a general chat reply. I can send your question now with your fever details and safety answers attached.`;
+}
+
+function getPostProcedureSportsFollowUp(
+  userMessage: string,
+  memoryTags: MemoryTag[]
+): Pick<ChatResponse, 'content' | 'language' | 'riskAssessment' | 'shouldEscalate'> | null {
+  const asksAboutSport = /\b(badminton|sport|exercise|play again|return to play|work out|training)\b/i.test(
+    userMessage
+  );
+  const hasBiopsyContext =
+    /\bbiopsy\b/i.test(userMessage) ||
+    memoryTags.some(
+      (tag) =>
+        tag.tags.includes('#procedure') && /\b(biopsy|biopsi|procedure|prosedur)\b/i.test(tag.value)
+    );
+
+  if (!asksAboutSport || !hasBiopsyContext) {
+    return null;
+  }
+
+  const language = detectLanguage(userMessage);
+
+  return {
+    content:
+      language === 'id'
+        ? 'Sebelum saya jawab soal kembali bermain badminton setelah biopsi: apakah ada gejala baru sejak prosedur itu?'
+        : 'Before I answer about getting back to badminton after the biopsy: have you had any new symptoms since the procedure?',
+    language,
+    riskAssessment: buildLowRiskAssessment(),
+    shouldEscalate: false,
+  };
+}
+
+function buildFeverEscalationQuestionDraft(
+  language: string,
+  triageState: FeverTriageState
+): string {
+  const temperature = triageState.temperature ? `${triageState.temperature}C` : null;
+  const chestPainText =
+    triageState.chestPain === false ? 'I do not have chest pain' : 'I may have chest pain';
+  const breathingText =
+    triageState.breathingDifficulty === false
+      ? 'I do not have difficulty breathing'
+      : 'I may have difficulty breathing';
+  const feverStartText = triageState.feverStart
+    ? `The fever started ${triageState.feverStart}`
+    : 'The fever started tonight';
+
+  if (language === 'id') {
+    return `${temperature ? `Saya demam ${temperature}` : 'Saya demam ringan'} malam ini menjelang biopsi besok. ${chestPainText.replace('I do not have chest pain', 'Saya tidak mengalami nyeri dada').replace('I may have chest pain', 'Saya mungkin mengalami nyeri dada')}. ${breathingText.replace('I do not have difficulty breathing', 'Saya tidak mengalami sesak napas').replace('I may have difficulty breathing', 'Saya mungkin mengalami sesak napas')}. ${feverStartText.replace('The fever started', 'Demam mulai')}. Apakah saya tetap datang besok atau perlu ke IGD?`;
+  }
+
+  return `${temperature ? `I have a fever of ${temperature}` : 'I have a mild fever'} tonight before tomorrow's biopsy. ${chestPainText}. ${breathingText}. ${feverStartText}. Should I still come in tomorrow, or do I need urgent review tonight?`;
+}
+
+function buildFeverEscalationSummary(
+  language: string,
+  userMessage: string,
+  triageState: FeverTriageState,
+  memoryTags: MemoryTag[]
+): string {
+  const prefersBahasa = memoryTags.some(
+    (tag) =>
+      /\b(preferred language|prefers)\b/i.test(tag.value) &&
+      /\b(id|bahasa indonesia|indonesia)\b/i.test(tag.value)
+  );
+  const procedureLabel =
+    /\b(tomorrow|besok)\b/i.test(userMessage)
+      ? 'Biopsy scheduled tomorrow'
+      : memoryTags.find((tag) => tag.tags.includes('#procedure'))?.value || 'Biopsy planned';
+  const temperature = triageState.temperature ? `${triageState.temperature}C` : 'mild fever';
+  const chestPainText = triageState.chestPain === false ? 'No chest pain reported.' : '';
+  const breathingText =
+    triageState.breathingDifficulty === false ? 'No breathing difficulty reported.' : '';
+  const languageNote = prefersBahasa ? 'Prefers Bahasa Indonesia.' : '';
+
+  if (language === 'id') {
+    return `${procedureLabel}. Demam ${temperature}. ${chestPainText.replace('No chest pain reported.', 'Tidak ada nyeri dada.')}${breathingText.replace('No breathing difficulty reported.', ' Tidak ada sesak napas.')}${languageNote.replace('Prefers Bahasa Indonesia.', ' Lebih nyaman dalam Bahasa Indonesia.')} Perlu panduan klinis tentang apakah prosedur besok masih bisa dilanjutkan.`
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  return `${procedureLabel}. Fever ${temperature}. ${chestPainText} ${breathingText} ${languageNote} Needs clinician guidance on whether tomorrow's procedure should still proceed.`
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function getPreProcedureFeverFlow(
+  userMessage: string,
+  conversationHistory: ConversationEntry[],
+  memoryTags: MemoryTag[],
+  riskAssessment: RiskAssessment
+): Pick<
+  ChatResponse,
+  'content' | 'language' | 'riskAssessment' | 'shouldEscalate' | 'deferEscalationPrompt' | 'escalationQuestionDraft' | 'escalationSummary'
+> | null {
+  if (!hasFeverLanguage(userMessage) || !hasUpcomingProcedureContext(userMessage, memoryTags)) {
+    return null;
+  }
+
+  const language = detectLanguage(userMessage);
+  const triageState = extractFeverTriageState(userMessage, conversationHistory);
+  const missingAnswers = [
+    triageState.chestPain == null,
+    triageState.breathingDifficulty == null,
+    triageState.feverStart == null,
+  ].filter(Boolean).length;
+
+  if (missingAnswers > 0) {
+    return {
+      content: buildFeverFollowUpQuestions(language),
+      language,
+      riskAssessment,
+      shouldEscalate: false,
+      deferEscalationPrompt: true,
+    };
+  }
+
+  return {
+    content: buildReadyToEscalateResponse(language),
+    language,
+    riskAssessment,
+    shouldEscalate: true,
+    escalationQuestionDraft: buildFeverEscalationQuestionDraft(language, triageState),
+    escalationSummary: buildFeverEscalationSummary(language, userMessage, triageState, memoryTags),
   };
 }
 
@@ -206,6 +467,9 @@ function buildClinicianAttemptedResponse(
 ): string {
   const normalizedQuestion = question.toLowerCase();
   const primaryContext = contextSnapshot[0]?.value?.toLowerCase() || '';
+  const procedureContext = contextSnapshot.some((tag) =>
+    /\b(biopsy|biopsi|procedure|prosedur)\b/i.test(tag.value)
+  );
 
   if (/\bdrive|driving\b/i.test(normalizedQuestion)) {
     return 'Please avoid driving until the symptom has settled, especially if you feel unsteady, drowsy, or unwell.';
@@ -225,6 +489,10 @@ function buildClinicianAttemptedResponse(
 
   if (/\bnausea|vomit\b/i.test(normalizedQuestion) || /\bnausea|vomit\b/i.test(primaryContext)) {
     return 'Please note when the nausea starts relative to your tablets, and let us know the same day if you cannot keep fluids down or it lasts most of the day.';
+  }
+
+  if (/\bfever|temperature\b/i.test(normalizedQuestion) && procedureContext) {
+    return 'Mild fever before a procedure can happen with travel fatigue or anxiety. Please rest, drink water, and you may use paracetamol if you normally tolerate it, then arrive 30 minutes early so we can check your vitals before making the final decision.';
   }
 
   if (/\bfever|temperature\b/i.test(normalizedQuestion)) {
@@ -657,6 +925,43 @@ export async function generateChatResponse(
     language !== 'en'
       ? `\n\nIMPORTANT: The patient is writing in ${language}. Respond in the same language.`
       : '';
+  const feverTriageFlow = getPreProcedureFeverFlow(
+    userMessage,
+    conversationHistory,
+    memoryTags,
+    riskAssessment
+  );
+
+  if (feverTriageFlow) {
+    const extractedTags = await extractTags(userMessage);
+
+    return {
+      content: validateResponse(feverTriageFlow.content),
+      language: feverTriageFlow.language,
+      isEmergency: false,
+      extractedTags,
+      riskAssessment: feverTriageFlow.riskAssessment,
+      shouldEscalate: feverTriageFlow.shouldEscalate,
+      deferEscalationPrompt: feverTriageFlow.deferEscalationPrompt,
+      escalationQuestionDraft: feverTriageFlow.escalationQuestionDraft,
+      escalationSummary: feverTriageFlow.escalationSummary,
+    };
+  }
+
+  const sportsFollowUp = getPostProcedureSportsFollowUp(userMessage, memoryTags);
+
+  if (sportsFollowUp) {
+    const extractedTags = await extractTags(userMessage);
+
+    return {
+      content: validateResponse(sportsFollowUp.content),
+      language: sportsFollowUp.language,
+      isEmergency: false,
+      extractedTags,
+      riskAssessment: sportsFollowUp.riskAssessment,
+      shouldEscalate: false,
+    };
+  }
   let groundingResult = null;
 
   try {
@@ -1001,21 +1306,45 @@ export async function generateTriageSummary(
 export async function generateClinicianDraft(
   question: string,
   contextSnapshot: MemoryTag[]
-): Promise<string> {
+): Promise<ClinicianDraftResult> {
+  const language = detectLanguage(question);
+  const languageInstruction =
+    language !== 'en'
+      ? `\n\nIMPORTANT: The patient is writing in ${language}. Draft the reply in the same language.`
+      : '';
+  let groundingResult = null;
+
+  try {
+    groundingResult = await getClinicianDraftGrounding(question, contextSnapshot);
+  } catch (error) {
+    console.error('Clinician draft grounding error:', error);
+  }
+
   try {
     const contextText = contextSnapshot.length > 0
       ? '\n\nPatient context:\n' + contextSnapshot.map((tag) => `- ${tag.value} (${tag.status})`).join('\n')
       : '';
 
     const realtimeResponse = await runRealtimeSession({
-      instructions: CLINICIAN_DRAFT_PROMPT,
+      instructions:
+        CLINICIAN_DRAFT_PROMPT +
+        buildClinicianGroundingPrompt(groundingResult) +
+        languageInstruction,
       userText: `Patient question: "${question}"${contextText}`,
       maxOutputTokens: 220,
     });
 
-    return ensureClinicianDraftStructure(realtimeResponse.text, question, contextSnapshot);
+    return {
+      draft: ensureClinicianDraftStructure(realtimeResponse.text, question, contextSnapshot),
+      groundedBySearch: Boolean(groundingResult?.sources.length),
+      sources: groundingResult?.sources || [],
+    };
   } catch (error) {
     console.error('Realtime clinician draft error:', error);
-    return buildDeterministicClinicianDraft(question, contextSnapshot);
+    return {
+      draft: buildDeterministicClinicianDraft(question, contextSnapshot),
+      groundedBySearch: Boolean(groundingResult?.sources.length),
+      sources: groundingResult?.sources || [],
+    };
   }
 }

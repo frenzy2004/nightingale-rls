@@ -39,6 +39,11 @@ export interface SourceReference {
   domain: string;
 }
 
+export interface GroundingSource extends SourceReference {
+  excerpt: string;
+  publishedDate?: string | null;
+}
+
 export interface ProviderIdentity {
   name: string;
   role: string;

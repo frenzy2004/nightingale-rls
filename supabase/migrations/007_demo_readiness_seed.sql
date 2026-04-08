@@ -56,7 +56,7 @@ BEGIN
       patient_a, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated',
       'demo.patient@nightingale.health', default_password, NOW(),
       '{"provider":"email","providers":["email"]}',
-      '{"full_name":"Nadia Rahman","role":"patient"}',
+      '{"full_name":"Eileen Hartono","role":"patient"}',
       NOW(), NOW(), '', '', '', ''
     );
   ELSE
@@ -64,7 +64,7 @@ BEGIN
     SET encrypted_password = default_password,
         email_confirmed_at = COALESCE(email_confirmed_at, NOW()),
         raw_app_meta_data = '{"provider":"email","providers":["email"]}',
-        raw_user_meta_data = '{"full_name":"Nadia Rahman","role":"patient"}',
+        raw_user_meta_data = '{"full_name":"Eileen Hartono","role":"patient"}',
         updated_at = NOW()
     WHERE id = patient_a;
   END IF;
@@ -221,7 +221,7 @@ BEGIN
   INSERT INTO users (id, email, full_name, role, clinic_id)
   VALUES
     (clinician_id, 'demo.doctor@nightingale.health', 'Dr Alan Teh', 'clinician', demo_clinic_id),
-    (patient_a, 'demo.patient@nightingale.health', 'Nadia Rahman', 'patient', demo_clinic_id),
+    (patient_a, 'demo.patient@nightingale.health', 'Eileen Hartono', 'patient', demo_clinic_id),
     (patient_b, 'lydia.ong@nightingale.health', 'Lydia Ong', 'patient', demo_clinic_id),
     (patient_c, 'harith.jamal@nightingale.health', 'Harith Jamal', 'patient', demo_clinic_id),
     (patient_d, 'sara.lee@nightingale.health', 'Sara Lee', 'patient', demo_clinic_id),
@@ -246,14 +246,14 @@ BEGIN
   VALUES
     (
       patient_a,
-      '52 years',
-      'SJMC-240318',
-      ARRAY['Penicillin', 'Shellfish'],
-      'Breast cancer follow-up, post-biopsy planning',
-      'Prefers concise instructions, usually messages late evening, worried about procedure prep and nausea after treatment.',
-      '{"last_visit":"2 days ago","risk_profile":"Moderate","care_program":"Oncology fast-track","last_question":"Biopsy preparation"}'::jsonb,
-      '["Biopsy booked for Thursday morning","Stopped OTC pain relief last week","Family member accompanies visits"]'::jsonb,
-      'en'
+      '47 years',
+      'SJMC-260409',
+      ARRAY['No known drug allergies'],
+      'Indonesian badminton player preparing to travel for a breast biopsy',
+      'Flying from Jakarta to SJMC for a breast biopsy. She is more comfortable in Bahasa Indonesia, worried about anaesthesia and recovery, and wants a calm step-by-step explanation before travelling alone.',
+      '{"last_visit":"Pre-arrival consult planned","risk_profile":"Moderate","care_program":"Oncology medical tourism","last_question":"Anaesthesia and recovery for biopsy"}'::jsonb,
+      '["Travelling from Jakarta for breast biopsy work-up","Indonesian badminton player","Family is in Jakarta while patient travels alone","Prefers Bahasa Indonesia for reassurance and instructions"]'::jsonb,
+      'id'
     ),
     (
       patient_b,
@@ -310,44 +310,76 @@ BEGIN
         preferred_language = EXCLUDED.preferred_language,
         updated_at = NOW();
 
+  DELETE FROM clinician_replies
+  WHERE id IN (
+    '00000000-0000-0000-0000-000000004001',
+    '00000000-0000-0000-0000-000000004003'
+  );
+
+  DELETE FROM escalations
+  WHERE id IN (
+    '00000000-0000-0000-0000-000000003001',
+    '00000000-0000-0000-0000-000000003006',
+    '00000000-0000-0000-0000-000000003009'
+  );
+
+  DELETE FROM messages
+  WHERE id IN (
+    '00000000-0000-0000-0000-000000001008',
+    '00000000-0000-0000-0000-000000001009',
+    '00000000-0000-0000-0000-000000001101',
+    '00000000-0000-0000-0000-000000001103'
+  );
+
   INSERT INTO messages (id, user_id, conversation_id, content, sender, authority, language, message_type, metadata, created_at)
   VALUES
-    ('00000000-0000-0000-0000-000000001001', patient_a, '10000000-0000-0000-0000-000000000001', 'How should I get ready for my biopsy on Thursday?', 'patient', 'ai_generated', 'en', 'chat', '{}'::jsonb, NOW() - INTERVAL '18 hours'),
-    ('00000000-0000-0000-0000-000000001002', patient_a, '10000000-0000-0000-0000-000000000001', 'Bring a medication list, avoid any fasting changes unless your care team has told you to, and wear something easy to change out of. If you notice new heavy bleeding or feel faint, contact SJMC urgently.', 'ai', 'ai_generated', 'en', 'chat', '{"riskLevel":"medium"}'::jsonb, NOW() - INTERVAL '18 hours' + INTERVAL '2 minutes'),
-    ('00000000-0000-0000-0000-000000001003', patient_a, '10000000-0000-0000-0000-000000000001', 'Can the care team tell me if I need to stop Panadol?', 'patient', 'ai_generated', 'en', 'chat', '{}'::jsonb, NOW() - INTERVAL '17 hours'),
+    ('00000000-0000-0000-0000-000000001001', patient_a, '10000000-0000-0000-0000-000000000001', 'Saya takut. Apa yang akan mereka lakukan kepada saya? Apakah saya akan dibius untuk biopsi?', 'patient', 'ai_generated', 'id', 'chat', '{}'::jsonb, NOW() - INTERVAL '18 hours'),
+    ('00000000-0000-0000-0000-000000001002', patient_a, '10000000-0000-0000-0000-000000000001', 'Saya paham ini terasa menakutkan. Saat konsultasi, tim akan menjelaskan langkah biopsi satu per satu dan menjawab pertanyaan Anda dengan tenang. Banyak biopsi payudara dilakukan dengan bius lokal, jadi Anda biasanya tidak perlu tidur total, tetapi dokter akan memastikan rencana yang paling tepat untuk Anda.', 'ai', 'ai_generated', 'id', 'chat', '{"riskLevel":"low","groundedBySearch":true,"sources":[{"title":"Breast biopsy","url":"https://medlineplus.gov/lab-tests/breast-biopsy/","publisher":"MedlinePlus","domain":"medlineplus.gov"},{"title":"Breast changes and conditions","url":"https://www.cancer.gov/types/breast","publisher":"NCI","domain":"cancer.gov"},{"title":"Breast cancer","url":"https://www.who.int/news-room/fact-sheets/detail/breast-cancer","publisher":"WHO","domain":"who.int"}]}'::jsonb, NOW() - INTERVAL '18 hours' + INTERVAL '2 minutes'),
+    ('00000000-0000-0000-0000-000000001003', patient_a, '10000000-0000-0000-0000-000000000001', 'Kalau begitu, berapa lama saya mungkin perlu tinggal di Malaysia setelah biopsi?', 'patient', 'ai_generated', 'id', 'chat', '{}'::jsonb, NOW() - INTERVAL '17 hours'),
     ('00000000-0000-0000-0000-000000001004', patient_b, '10000000-0000-0000-0000-000000000002', 'My headaches are worse in the morning. Is that something I should worry about?', 'patient', 'ai_generated', 'en', 'chat', '{}'::jsonb, NOW() - INTERVAL '14 hours'),
     ('00000000-0000-0000-0000-000000001005', patient_c, '10000000-0000-0000-0000-000000000003', 'I feel more breathless than usual after today''s infusion.', 'patient', 'ai_generated', 'en', 'chat', '{}'::jsonb, NOW() - INTERVAL '5 hours'),
     ('00000000-0000-0000-0000-000000001006', patient_d, '10000000-0000-0000-0000-000000000004', 'The nausea after my tablets is lasting most of the morning.', 'patient', 'ai_generated', 'en', 'chat', '{}'::jsonb, NOW() - INTERVAL '9 hours'),
-    ('00000000-0000-0000-0000-000000001007', patient_e, '10000000-0000-0000-0000-000000000005', 'I found a hard lump on my neck today and now I''m scared.', 'patient', 'ai_generated', 'en', 'chat', '{}'::jsonb, NOW() - INTERVAL '2 hours')
-  ON CONFLICT (id) DO NOTHING;
+    ('00000000-0000-0000-0000-000000001007', patient_e, '10000000-0000-0000-0000-000000000005', 'I found a hard lump on my neck today and now I''m scared.', 'patient', 'ai_generated', 'en', 'chat', '{}'::jsonb, NOW() - INTERVAL '2 hours'),
+    ('00000000-0000-0000-0000-000000001010', patient_a, '10000000-0000-0000-0000-000000000001', 'Lama tinggal biasanya bergantung pada jenis biopsi dan apa yang tim lihat setelah prosedur. Banyak pasien bisa pulang pada hari yang sama atau keesokan hari, tetapi dokter akan memberi tahu Anda jika perlu observasi lebih lama atau pemeriksaan lanjutan di Malaysia.', 'ai', 'ai_generated', 'id', 'chat', '{"riskLevel":"low","groundedBySearch":true,"sources":[{"title":"Breast biopsy","url":"https://medlineplus.gov/lab-tests/breast-biopsy/","publisher":"MedlinePlus","domain":"medlineplus.gov"},{"title":"Breast changes and conditions","url":"https://www.cancer.gov/types/breast","publisher":"NCI","domain":"cancer.gov"},{"title":"Breast cancer","url":"https://www.who.int/news-room/fact-sheets/detail/breast-cancer","publisher":"WHO","domain":"who.int"}]}'::jsonb, NOW() - INTERVAL '17 hours' + INTERVAL '2 minutes')
+  ON CONFLICT (id) DO UPDATE
+    SET user_id = EXCLUDED.user_id,
+        conversation_id = EXCLUDED.conversation_id,
+        content = EXCLUDED.content,
+        sender = EXCLUDED.sender,
+        authority = EXCLUDED.authority,
+        language = EXCLUDED.language,
+        message_type = EXCLUDED.message_type,
+        metadata = EXCLUDED.metadata,
+        created_at = EXCLUDED.created_at;
 
   INSERT INTO memory_tags (id, message_id, user_id, value, tags, status, authority, source_message_id, created_at, updated_at)
   VALUES
-    ('00000000-0000-0000-0000-000000002001', '00000000-0000-0000-0000-000000001003', patient_a, 'takes Panadol occasionally', ARRAY['#medication'], 'stopped', 'ai_extracted', '00000000-0000-0000-0000-000000001003', NOW() - INTERVAL '17 hours', NOW() - INTERVAL '17 hours'),
+    ('00000000-0000-0000-0000-000000002001', '00000000-0000-0000-0000-000000001001', patient_a, 'breast biopsy planned at SJMC', ARRAY['#procedure', '#timeline'], 'active', 'ai_extracted', '00000000-0000-0000-0000-000000001001', NOW() - INTERVAL '18 hours', NOW() - INTERVAL '18 hours'),
     ('00000000-0000-0000-0000-000000002002', '00000000-0000-0000-0000-000000001004', patient_b, 'morning headaches', ARRAY['#symptom'], 'active', 'ai_extracted', '00000000-0000-0000-0000-000000001004', NOW() - INTERVAL '14 hours', NOW() - INTERVAL '14 hours'),
     ('00000000-0000-0000-0000-000000002003', '00000000-0000-0000-0000-000000001005', patient_c, 'more breathless after infusion', ARRAY['#symptom'], 'flagged', 'ai_extracted', '00000000-0000-0000-0000-000000001005', NOW() - INTERVAL '5 hours', NOW() - INTERVAL '5 hours'),
     ('00000000-0000-0000-0000-000000002004', '00000000-0000-0000-0000-000000001006', patient_d, 'morning nausea after tablets', ARRAY['#symptom'], 'active', 'ai_extracted', '00000000-0000-0000-0000-000000001006', NOW() - INTERVAL '9 hours', NOW() - INTERVAL '9 hours'),
-    ('00000000-0000-0000-0000-000000002005', '00000000-0000-0000-0000-000000001007', patient_e, 'new neck lump today', ARRAY['#symptom', '#timeline'], 'flagged', 'ai_extracted', '00000000-0000-0000-0000-000000001007', NOW() - INTERVAL '2 hours', NOW() - INTERVAL '2 hours')
-  ON CONFLICT (id) DO NOTHING;
+    ('00000000-0000-0000-0000-000000002005', '00000000-0000-0000-0000-000000001007', patient_e, 'new neck lump today', ARRAY['#symptom', '#timeline'], 'flagged', 'ai_extracted', '00000000-0000-0000-0000-000000001007', NOW() - INTERVAL '2 hours', NOW() - INTERVAL '2 hours'),
+    ('00000000-0000-0000-0000-000000002006', '00000000-0000-0000-0000-000000001001', patient_a, 'anxious about biopsy and possible results', ARRAY['#timeline'], 'active', 'ai_extracted', '00000000-0000-0000-0000-000000001001', NOW() - INTERVAL '18 hours', NOW() - INTERVAL '18 hours'),
+    ('00000000-0000-0000-0000-000000002007', '00000000-0000-0000-0000-000000001001', patient_a, 'Prefers Bahasa Indonesia', ARRAY['#language'], 'active', 'clinician_verified', '00000000-0000-0000-0000-000000001001', NOW() - INTERVAL '18 hours', NOW() - INTERVAL '18 hours'),
+    ('00000000-0000-0000-0000-000000002008', '00000000-0000-0000-0000-000000001003', patient_a, 'Questions asked: anaesthesia, recovery time, and length of stay in Malaysia', ARRAY['#timeline'], 'active', 'clinician_verified', '00000000-0000-0000-0000-000000001003', NOW() - INTERVAL '17 hours', NOW() - INTERVAL '17 hours'),
+    ('00000000-0000-0000-0000-000000002009', '00000000-0000-0000-0000-000000001003', patient_a, 'Travelling from Jakarta alone while family remains at home', ARRAY['#lifestyle', '#timeline'], 'active', 'clinician_verified', '00000000-0000-0000-0000-000000001003', NOW() - INTERVAL '17 hours', NOW() - INTERVAL '17 hours'),
+    ('00000000-0000-0000-0000-000000002010', '00000000-0000-0000-0000-000000001003', patient_a, 'Badminton player who wants a clear return-to-sport plan', ARRAY['#lifestyle'], 'active', 'clinician_verified', '00000000-0000-0000-0000-000000001003', NOW() - INTERVAL '17 hours', NOW() - INTERVAL '17 hours')
+  ON CONFLICT (id) DO UPDATE
+    SET message_id = EXCLUDED.message_id,
+        user_id = EXCLUDED.user_id,
+        value = EXCLUDED.value,
+        tags = EXCLUDED.tags,
+        status = EXCLUDED.status,
+        authority = EXCLUDED.authority,
+        source_message_id = EXCLUDED.source_message_id,
+        created_at = EXCLUDED.created_at,
+        updated_at = EXCLUDED.updated_at;
 
   INSERT INTO escalations (
     id, patient_id, clinic_id, conversation_id, original_question, patient_edited_question,
     ai_summary, context_snapshot, status, created_at, updated_at
   )
   VALUES
-    (
-      '00000000-0000-0000-0000-000000003001',
-      patient_a,
-      demo_clinic_id,
-      '10000000-0000-0000-0000-000000000001',
-      'Can the care team tell me if I need to stop Panadol?',
-      'Please confirm whether I should stop Panadol before my biopsy on Thursday morning.',
-      'Biopsy preparation question from oncology follow-up patient. Wants medication clarification before Thursday procedure.',
-      '[{"id":"00000000-0000-0000-0000-000000002001","value":"takes Panadol occasionally","tags":["#medication"],"status":"stopped","authority":"ai_extracted"}]'::jsonb,
-      'resolved',
-      NOW() - INTERVAL '16 hours',
-      NOW() - INTERVAL '15 hours'
-    ),
     (
       '00000000-0000-0000-0000-000000003002',
       patient_b,
@@ -401,19 +433,6 @@ BEGIN
       NOW() - INTERVAL '90 minutes'
     ),
     (
-      '00000000-0000-0000-0000-000000003006',
-      patient_a,
-      demo_clinic_id,
-      '10000000-0000-0000-0000-000000000001',
-      'Will the team explain what happens after the biopsy too?',
-      'Can the team also explain what happens after the biopsy and who will call with results?',
-      'Wants post-procedure expectations and communication timeline.',
-      '[{"value":"biopsy booked for Thursday morning","tags":["#procedure"],"status":"active","authority":"ai_extracted"}]'::jsonb,
-      'resolved',
-      NOW() - INTERVAL '10 hours',
-      NOW() - INTERVAL '8 hours'
-    ),
-    (
       '00000000-0000-0000-0000-000000003007',
       patient_b,
       demo_clinic_id,
@@ -449,18 +468,6 @@ BEGIN
   INSERT INTO messages (id, user_id, conversation_id, content, sender, authority, language, message_type, metadata, created_at)
   VALUES
     (
-      '00000000-0000-0000-0000-000000001101',
-      patient_a,
-      '10000000-0000-0000-0000-000000000001',
-      'Please stop Panadol 24 hours before the biopsy unless our team tells you otherwise at your pre-procedure call. If you have new bleeding or feel faint tonight, come to SJMC Emergency or dial 999.',
-      'clinician',
-      'clinician_verified',
-      'en',
-      'provider_reply',
-      '{"provider":{"name":"Dr Alan Teh","role":"Consultant Oncologist","providerName":"Asia OneHealthCare","hospitalName":"SJMC","specialty":"Oncology"},"disclaimer":"This message supports, but does not replace, urgent in-person care. If symptoms escalate, contact SJMC or dial 999.","quickActions":[{"id":"explain","label":"Explain this to me"},{"id":"next","label":"What should I do next?"},{"id":"urgent","label":"How urgent is this?"}],"appointmentOptions":[{"id":"slot-1","label":"Tue, 9 Apr · 10:00 AM","datetime":"2026-04-09T10:00:00+08:00"},{"id":"slot-2","label":"Wed, 10 Apr · 2:30 PM","datetime":"2026-04-10T14:30:00+08:00"}]}'::jsonb,
-      NOW() - INTERVAL '15 hours'
-    ),
-    (
       '00000000-0000-0000-0000-000000001102',
       patient_b,
       '10000000-0000-0000-0000-000000000002',
@@ -469,20 +476,8 @@ BEGIN
       'clinician_verified',
       'en',
       'provider_reply',
-      '{"provider":{"name":"Dr Alan Teh","role":"Consultant Oncologist","providerName":"Asia OneHealthCare","hospitalName":"SJMC","specialty":"Oncology"},"disclaimer":"This message supports, but does not replace, urgent in-person care. If symptoms escalate, contact SJMC or dial 999.","quickActions":[{"id":"explain","label":"Explain this to me"},{"id":"next","label":"What should I do next?"},{"id":"urgent","label":"How urgent is this?"}],"appointmentOptions":[{"id":"slot-1","label":"Tue, 9 Apr · 10:00 AM","datetime":"2026-04-09T10:00:00+08:00"},{"id":"slot-2","label":"Wed, 10 Apr · 2:30 PM","datetime":"2026-04-10T14:30:00+08:00"}]}'::jsonb,
+      '{"provider":{"name":"Dr Alan Teh","role":"Consultant Oncologist","providerName":"Asia OneHealthCare","hospitalName":"SJMC","specialty":"Oncology"},"disclaimer":"This message supports, but does not replace, urgent in-person care. If symptoms escalate, contact SJMC or dial 999.","quickActions":[{"id":"explain","label":"Explain this to me"},{"id":"next","label":"What should I do next?"},{"id":"urgent","label":"How urgent is this?"}],"appointmentOptions":[{"id":"slot-1","label":"Tue, 9 Apr - 10:00 AM","datetime":"2026-04-09T10:00:00+08:00"},{"id":"slot-2","label":"Wed, 10 Apr - 2:30 PM","datetime":"2026-04-10T14:30:00+08:00"}]}'::jsonb,
       NOW() - INTERVAL '11 hours'
-    ),
-    (
-      '00000000-0000-0000-0000-000000001103',
-      patient_a,
-      '10000000-0000-0000-0000-000000000001',
-      'After the biopsy, we expect mild soreness and we usually call with an update once pathology is reviewed. If pain or swelling rises quickly, contact the care team the same day.',
-      'clinician',
-      'clinician_verified',
-      'en',
-      'provider_reply',
-      '{"provider":{"name":"Dr Alan Teh","role":"Consultant Oncologist","providerName":"Asia OneHealthCare","hospitalName":"SJMC","specialty":"Oncology"},"disclaimer":"This message supports, but does not replace, urgent in-person care. If symptoms escalate, contact SJMC or dial 999.","quickActions":[{"id":"explain","label":"Explain this to me"},{"id":"next","label":"What should I do next?"},{"id":"urgent","label":"How urgent is this?"}],"appointmentOptions":[{"id":"slot-1","label":"Tue, 9 Apr · 10:00 AM","datetime":"2026-04-09T10:00:00+08:00"},{"id":"slot-2","label":"Wed, 10 Apr · 2:30 PM","datetime":"2026-04-10T14:30:00+08:00"}]}'::jsonb,
-      NOW() - INTERVAL '8 hours'
     ),
     (
       '00000000-0000-0000-0000-000000001104',
@@ -493,23 +488,22 @@ BEGIN
       'clinician_verified',
       'en',
       'provider_reply',
-      '{"provider":{"name":"Dr Alan Teh","role":"Consultant Oncologist","providerName":"Asia OneHealthCare","hospitalName":"SJMC","specialty":"Oncology"},"disclaimer":"This message supports, but does not replace, urgent in-person care. If symptoms escalate, contact SJMC or dial 999.","quickActions":[{"id":"explain","label":"Explain this to me"},{"id":"next","label":"What should I do next?"},{"id":"urgent","label":"How urgent is this?"}],"appointmentOptions":[{"id":"slot-1","label":"Tue, 9 Apr · 10:00 AM","datetime":"2026-04-09T10:00:00+08:00"},{"id":"slot-2","label":"Wed, 10 Apr · 2:30 PM","datetime":"2026-04-10T14:30:00+08:00"}]}'::jsonb,
+      '{"provider":{"name":"Dr Alan Teh","role":"Consultant Oncologist","providerName":"Asia OneHealthCare","hospitalName":"SJMC","specialty":"Oncology"},"disclaimer":"This message supports, but does not replace, urgent in-person care. If symptoms escalate, contact SJMC or dial 999.","quickActions":[{"id":"explain","label":"Explain this to me"},{"id":"next","label":"What should I do next?"},{"id":"urgent","label":"How urgent is this?"}],"appointmentOptions":[{"id":"slot-1","label":"Tue, 9 Apr - 10:00 AM","datetime":"2026-04-09T10:00:00+08:00"},{"id":"slot-2","label":"Wed, 10 Apr - 2:30 PM","datetime":"2026-04-10T14:30:00+08:00"}]}'::jsonb,
       NOW() - INTERVAL '6 hours'
     )
-  ON CONFLICT (id) DO NOTHING;
+  ON CONFLICT (id) DO UPDATE
+    SET user_id = EXCLUDED.user_id,
+        conversation_id = EXCLUDED.conversation_id,
+        content = EXCLUDED.content,
+        sender = EXCLUDED.sender,
+        authority = EXCLUDED.authority,
+        language = EXCLUDED.language,
+        message_type = EXCLUDED.message_type,
+        metadata = EXCLUDED.metadata,
+        created_at = EXCLUDED.created_at;
 
   INSERT INTO clinician_replies (id, escalation_id, clinician_id, message_id, ai_draft, final_reply, diff_log, sent_at)
   VALUES
-    (
-      '00000000-0000-0000-0000-000000004001',
-      '00000000-0000-0000-0000-000000003001',
-      clinician_id,
-      '00000000-0000-0000-0000-000000001101',
-      'Please stop Panadol before the biopsy and call if you feel worse.',
-      'Please stop Panadol 24 hours before the biopsy unless our team tells you otherwise at your pre-procedure call. If you have new bleeding or feel faint tonight, come to SJMC Emergency or dial 999.',
-      '[{"type":"removed","value":"Please stop Panadol before the biopsy and call if you feel worse."},{"type":"added","value":"Please stop Panadol 24 hours before the biopsy unless our team tells you otherwise at your pre-procedure call. If you have new bleeding or feel faint tonight, come to SJMC Emergency or dial 999."}]'::jsonb,
-      NOW() - INTERVAL '15 hours'
-    ),
     (
       '00000000-0000-0000-0000-000000004002',
       '00000000-0000-0000-0000-000000003002',
@@ -521,16 +515,6 @@ BEGIN
       NOW() - INTERVAL '11 hours'
     ),
     (
-      '00000000-0000-0000-0000-000000004003',
-      '00000000-0000-0000-0000-000000003006',
-      clinician_id,
-      '00000000-0000-0000-0000-000000001103',
-      'We will call after pathology is back.',
-      'After the biopsy, we expect mild soreness and we usually call with an update once pathology is reviewed. If pain or swelling rises quickly, contact the care team the same day.',
-      '[{"type":"removed","value":"We will call after pathology is back."},{"type":"added","value":"After the biopsy, we expect mild soreness and we usually call with an update once pathology is reviewed. If pain or swelling rises quickly, contact the care team the same day."}]'::jsonb,
-      NOW() - INTERVAL '8 hours'
-    ),
-    (
       '00000000-0000-0000-0000-000000004004',
       '00000000-0000-0000-0000-000000003007',
       clinician_id,
@@ -540,5 +524,14 @@ BEGIN
       '[{"type":"removed","value":"Avoid driving if symptoms return."},{"type":"added","value":"Please avoid driving tomorrow if the headache returns overnight or if you feel unsteady in the morning. Arrange transport and let us know if the pattern worsens."}]'::jsonb,
       NOW() - INTERVAL '6 hours'
     )
-  ON CONFLICT (id) DO NOTHING;
+  ON CONFLICT (id) DO UPDATE
+    SET escalation_id = EXCLUDED.escalation_id,
+        clinician_id = EXCLUDED.clinician_id,
+        message_id = EXCLUDED.message_id,
+        ai_draft = EXCLUDED.ai_draft,
+        final_reply = EXCLUDED.final_reply,
+        diff_log = EXCLUDED.diff_log,
+        sent_at = EXCLUDED.sent_at;
 END $$;
+
+

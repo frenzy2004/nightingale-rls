@@ -63,6 +63,8 @@ const MODERATE_RISK_KEYWORDS = [
   'infection',
 ];
 
+const PROACTIVE_ESCALATION_KEYWORDS = ['fever', 'infection'];
+
 const FILLER_PHRASES = [
   /^i'?m sorry[^.?!]*[.?!]\s*/i,
   /^that sounds really hard[^.?!]*[.?!]\s*/i,
@@ -126,12 +128,18 @@ export function assessMedicalRisk(content: string): RiskAssessment {
   }
 
   if (moderateSignals.length > 0) {
+    const escalationRecommended = moderateSignals.some((signal) =>
+      PROACTIVE_ESCALATION_KEYWORDS.includes(signal)
+    );
+
     return {
       level: 'medium',
       matchedSignals: moderateSignals,
-      summary: 'Clinically relevant follow-up signs detected. A clinician review may help if symptoms continue.',
+      summary: escalationRecommended
+        ? 'Clinically relevant follow-up signs detected. A clinician review is recommended.'
+        : 'Clinically relevant follow-up signs detected. A clinician review may help if symptoms continue.',
       emergency: false,
-      escalationRecommended: false,
+      escalationRecommended,
     };
   }
 

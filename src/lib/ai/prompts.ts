@@ -32,12 +32,12 @@ export function buildContextPrompt(memoryTags: MemoryTag[]): string {
   if (memoryTags.length === 0) return '';
 
   const relevantTags = memoryTags
-    .filter(tag => tag.status === 'active' || tag.status === 'flagged')
+    .filter((tag) => tag.status === 'active' || tag.status === 'flagged')
     .slice(0, 10);
 
   if (relevantTags.length === 0) return '';
 
-  const contextLines = relevantTags.map(tag => {
+  const contextLines = relevantTags.map((tag) => {
     const statusNote = tag.status === 'flagged' ? ' (needs clarification)' : '';
     const verifiedNote = tag.authority === 'clinician_verified' ? ' [verified by clinician]' : '';
     return `- ${tag.value}${statusNote}${verifiedNote}`;
@@ -87,20 +87,23 @@ Guidelines:
 - After that opener, add 1 or 2 short sentences that attempt to answer the patient's question in a useful way
 - Be professional, direct, and calm
 - Address the specific question
+- If the patient wrote in another language, draft in that same language
 - Include safe next-step guidance
 - Keep it concise (3 sentences max)
 - Mention urgent review only if the context actually sounds higher risk
 - Avoid vague placeholders like "noted context" unless you add a concrete next step
+- If clinician evidence sources are provided, use them to make the draft more specific without sounding like a literature review
 - The clinician will edit this before sending
 
 Remember: This is a draft that will be reviewed and edited by the actual clinician.`;
 
 export function detectLanguage(text: string): string {
   const languagePatterns: Record<string, RegExp[]> = {
-    es: [/\b(hola|gracias|por favor|tengo|dolor|médico)\b/i],
-    fr: [/\b(bonjour|merci|s'il vous plaît|j'ai|douleur|médecin)\b/i],
+    id: [/\b(halo|terima kasih|tolong|saya|tidak|apa(kah)?|bagaimana|demam|nyeri|obat|ubat|dokter|rumah sakit|bahasa|besok|malam|sendiri)\b/i],
+    es: [/\b(hola|gracias|por favor|tengo|dolor|medico)\b/i],
+    fr: [/\b(bonjour|merci|s'il vous plait|j'ai|douleur|medecin)\b/i],
     de: [/\b(hallo|danke|bitte|ich habe|schmerz|arzt)\b/i],
-    pt: [/\b(olá|obrigado|por favor|tenho|dor|médico)\b/i],
+    pt: [/\b(ola|obrigado|por favor|tenho|dor|medico)\b/i],
     zh: [/[\u4e00-\u9fff]/],
     ja: [/[\u3040-\u309f\u30a0-\u30ff]/],
     ko: [/[\uac00-\ud7af]/],
@@ -109,7 +112,7 @@ export function detectLanguage(text: string): string {
   };
 
   for (const [lang, patterns] of Object.entries(languagePatterns)) {
-    if (patterns.some(pattern => pattern.test(text))) {
+    if (patterns.some((pattern) => pattern.test(text))) {
       return lang;
     }
   }

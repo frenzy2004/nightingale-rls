@@ -7,6 +7,7 @@ import {
   ArrowLeft,
   ClipboardList,
   Clock,
+  ExternalLink,
   Loader2,
   RefreshCw,
   Send,
@@ -26,11 +27,19 @@ import {
   DEMO_PROVIDER,
   getClinicEscalationLabel,
 } from '@/lib/demo';
-import type { DiffEntry, Escalation, MemoryTag, PatientProfile } from '@/types';
+import type {
+  DiffEntry,
+  Escalation,
+  GroundingSource,
+  MemoryTag,
+  PatientProfile,
+} from '@/types';
 
 interface ReplyEditorProps {
   escalation: Escalation & { patient?: { full_name: string; email: string } };
   aiDraft: string;
+  draftGrounded?: boolean;
+  draftSources?: GroundingSource[];
   patientProfile?: PatientProfile | null;
   onRegenerateDraft: () => void;
   draftLoading?: boolean;
@@ -46,6 +55,8 @@ interface ReplyEditorProps {
 export function ReplyEditor({
   escalation,
   aiDraft,
+  draftGrounded = false,
+  draftSources = [],
   patientProfile,
   onRegenerateDraft,
   draftLoading,
@@ -134,6 +145,48 @@ export function ReplyEditor({
               </CardHeader>
               <CardContent>
                 <p className="text-sm text-muted-foreground">{escalation.ai_summary}</p>
+              </CardContent>
+            </Card>
+          )}
+
+          {draftSources.length > 0 && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="flex items-center gap-2 text-sm">
+                  <Sparkles className="h-4 w-4" />
+                  Evidence For AI Draft
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <p className="text-xs leading-5 text-muted-foreground">
+                  Live sources retrieved for this reply draft. The clinician still reviews and
+                  edits the final message before anything is sent.
+                </p>
+                <div className="space-y-3">
+                  {draftSources.map((source) => (
+                    <a
+                      key={source.url}
+                      href={source.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="block rounded-2xl border border-slate-200 bg-slate-50/80 p-3 transition-colors hover:bg-slate-100/80"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-slate-900">{source.title}</p>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {source.publisher} - {source.domain}
+                            {source.publishedDate ? ` - ${source.publishedDate}` : ''}
+                          </p>
+                          <p className="mt-2 text-xs leading-5 text-slate-600">
+                            {source.excerpt}
+                          </p>
+                        </div>
+                        <ExternalLink className="mt-0.5 h-4 w-4 flex-shrink-0 text-slate-500" />
+                      </div>
+                    </a>
+                  ))}
+                </div>
               </CardContent>
             </Card>
           )}
@@ -231,7 +284,10 @@ export function ReplyEditor({
 
             <p className="text-xs text-muted-foreground">
               Edit the AI-generated draft before sending. The verified response will appear back in
-              the patient messenger with your provider details attached.
+              the patient messenger with your provider details attached.{' '}
+              {draftGrounded
+                ? 'This draft used live evidence sources shown above.'
+                : 'This draft is currently based on patient context only.'}
             </p>
 
             <div className="rounded-2xl border border-teal-200 bg-teal-50/80 p-3">

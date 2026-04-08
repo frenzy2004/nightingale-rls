@@ -58,28 +58,14 @@ export function ChatInput({
     startRecording,
     stopRecording,
   } = useVoiceRecorder();
+  const visibleMessage = mode === 'voice' && recording ? transcript : message;
 
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
       textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 150)}px`;
     }
-  }, [message]);
-
-  useEffect(() => {
-    if (mode === 'voice' && recording) {
-      setMessage(transcript);
-    }
-  }, [mode, recording, transcript]);
-
-  useEffect(() => {
-    if (mode !== 'image') {
-      setImageAttachment(null);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
-    }
-  }, [mode]);
+  }, [visibleMessage]);
 
   const busy = Boolean(disabled || processing);
 
@@ -182,7 +168,7 @@ export function ChatInput({
       : busy || recording || !message.trim();
 
   return (
-    <div className="border-t bg-background">
+    <div className="shrink-0 border-t bg-background">
       {mode === 'image' && imageAttachment && (
         <div className="px-4 pt-4">
           <div className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
@@ -230,7 +216,7 @@ export function ChatInput({
 
         <Textarea
           ref={textareaRef}
-          value={message}
+          value={visibleMessage}
           onChange={(event) => setMessage(event.target.value)}
           onKeyDown={handleKeyDown}
           placeholder={getPlaceholder(mode, recording, placeholder)}
