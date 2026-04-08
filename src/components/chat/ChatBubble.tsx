@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Bird, ExternalLink, Image, Shield, Stethoscope, User } from 'lucide-react';
 import type { AppointmentOption, Message, QuickActionOption } from '@/types';
 import { cn } from '@/lib/utils';
+import { MessageAudioButton } from './MessageAudioButton';
 import { ProviderReplyCard } from './ProviderReplyCard';
 
 interface ChatBubbleProps {
@@ -13,6 +14,7 @@ interface ChatBubbleProps {
   showTimestamp?: boolean;
   onQuickAction?: (action: QuickActionOption, message: Message) => void;
   onAppointmentSelect?: (option: AppointmentOption, message: Message) => void;
+  shouldAutoPlayAudio?: boolean;
 }
 
 export function ChatBubble({
@@ -20,6 +22,7 @@ export function ChatBubble({
   showTimestamp = true,
   onQuickAction,
   onAppointmentSelect,
+  shouldAutoPlayAudio = false,
 }: ChatBubbleProps) {
   const isPatient = message.sender === 'patient';
   const isAI = message.sender === 'ai';
@@ -101,6 +104,7 @@ export function ChatBubble({
             message={message}
             onQuickAction={onQuickAction}
             onAppointmentSelect={onAppointmentSelect}
+            shouldAutoPlayAudio={shouldAutoPlayAudio}
           />
         ) : (
           <div className="space-y-2">
@@ -116,6 +120,13 @@ export function ChatBubble({
             >
               <p className="whitespace-pre-wrap">{message.content}</p>
             </div>
+            {!isPatient && (
+              <MessageAudioButton
+                text={message.content}
+                language={message.language}
+                shouldAutoPlay={shouldAutoPlayAudio}
+              />
+            )}
             {aiSources.length > 0 && (
               <div className="flex flex-wrap gap-2">
                 {aiSources.map((source) => (

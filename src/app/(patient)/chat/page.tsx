@@ -26,7 +26,10 @@ export default function ChatPage() {
   const [isContextOpen, setIsContextOpen] = useState(true);
   const [showEditModal, setShowEditModal] = useState(false);
   const [chatMode, setChatMode] = useState<ChatMode>('text');
+  const [autoPlayMessageId, setAutoPlayMessageId] = useState<string | null>(null);
   const chatScrollViewportRef = useRef<HTMLDivElement>(null);
+  const autoplayReadyRef = useRef(false);
+  const lastPlayableMessageIdRef = useRef<string | null>(null);
 
   const {
     messages,
@@ -61,6 +64,29 @@ export default function ChatPage() {
       behavior: initialLoading ? 'auto' : 'smooth',
     });
   }, [messages, initialLoading]);
+
+  useEffect(() => {
+    if (initialLoading) {
+      return;
+    }
+
+    const latestPlayableMessage = [...messages]
+      .reverse()
+      .find((message) => message.sender !== 'patient');
+
+    if (!autoplayReadyRef.current) {
+      autoplayReadyRef.current = true;
+      lastPlayableMessageIdRef.current = latestPlayableMessage?.id || null;
+      return;
+    }
+
+    if (!latestPlayableMessage || latestPlayableMessage.id === lastPlayableMessageIdRef.current) {
+      return;
+    }
+
+    lastPlayableMessageIdRef.current = latestPlayableMessage.id;
+    setAutoPlayMessageId(latestPlayableMessage.id);
+  }, [initialLoading, messages]);
 
   useEffect(() => {
     if (!userLoading && !user) {
@@ -180,6 +206,7 @@ export default function ChatPage() {
                         message={message}
                         onQuickAction={sendProviderAction}
                         onAppointmentSelect={sendAppointmentSelection}
+                        shouldAutoPlayAudio={message.id === autoPlayMessageId}
                       />
                     ))}
                     {loading && (

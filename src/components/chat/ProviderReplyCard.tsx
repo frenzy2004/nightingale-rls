@@ -12,17 +12,20 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import type { AppointmentOption, Message, QuickActionOption } from '@/types';
+import { MessageAudioButton } from './MessageAudioButton';
 
 interface ProviderReplyCardProps {
   message: Message;
   onQuickAction?: (action: QuickActionOption, message: Message) => void;
   onAppointmentSelect?: (option: AppointmentOption, message: Message) => void;
+  shouldAutoPlayAudio?: boolean;
 }
 
 export function ProviderReplyCard({
   message,
   onQuickAction,
   onAppointmentSelect,
+  shouldAutoPlayAudio = false,
 }: ProviderReplyCardProps) {
   const metadata = message.metadata || {};
   const provider = metadata.provider;
@@ -63,6 +66,12 @@ export function ProviderReplyCard({
         </div>
 
         <p className="whitespace-pre-wrap text-sm leading-6 text-slate-900">{message.content}</p>
+
+        <MessageAudioButton
+          text={message.content}
+          language={message.language}
+          shouldAutoPlay={shouldAutoPlayAudio}
+        />
 
         {metadata.disclaimer && (
           <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
