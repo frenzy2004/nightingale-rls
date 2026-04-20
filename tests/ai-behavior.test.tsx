@@ -102,6 +102,17 @@ describe('ai behavior', () => {
     expect(draft.draft.toLowerCase()).toMatch(/rest|drink|procedure|appointment/);
   });
 
+  it('rewrites generic clinician handoff language into a more usable fertility-biopsy draft', async () => {
+    const draft = await generateClinicianDraft(
+      'Will my fertility treatment be impacted by the biopsy?',
+      [makeMemoryTag({ value: 'Biopsy planned tomorrow' })]
+    );
+
+    expect(draft.draft.toLowerCase()).not.toContain('team will review');
+    expect(draft.draft.toLowerCase()).not.toContain('care team will review');
+    expect(draft.draft.toLowerCase()).toMatch(/fertility|timing|medication|treatment/);
+  });
+
   it('shows the continue chatting action alongside emergency escalation copy', () => {
     render(
       <EscalationPrompt

@@ -707,6 +707,27 @@ function trimToSentenceCount(text: string, maxSentences: number): string {
   return sentences.slice(0, maxSentences).join(' ').trim();
 }
 
+function stripGenericClinicianHandoffSentences(text: string): string {
+  const sentences =
+    text
+      .match(/[^.!?]+[.!?]?/g)
+      ?.map((sentence) => sentence.trim())
+      .filter(Boolean) || [];
+
+  const filtered = sentences.filter((sentence) => {
+    const normalized = sentence.toLowerCase();
+
+    return !(
+      /\b(team|care team|clinic team|sjmc team)\b/.test(normalized) &&
+      /\b(review|reviewing|will review|can review|confirm|confirmed|safest plan)\b/.test(
+        normalized
+      )
+    );
+  });
+
+  return filtered.join(' ').trim();
+}
+
 function buildClinicianAttemptedResponse(
   question: string,
   contextSnapshot: MemoryTag[],
@@ -717,6 +738,13 @@ function buildClinicianAttemptedResponse(
   const procedureContext = contextSnapshot.some((tag) =>
     /\b(biopsy|biopsi|procedure|prosedur)\b/i.test(tag.value)
   );
+  const fertilityContext =
+    /\b(fertility|ivf|egg|embryo|ovarian|sperm|pregnan|conceiv|reproductive)\b/i.test(
+      normalizedQuestion
+    ) ||
+    /\b(fertility|ivf|egg|embryo|ovarian|sperm|pregnan|conceiv|reproductive)\b/i.test(
+      primaryContext
+    );
 
   if (/\bdrive|driving\b/i.test(normalizedQuestion)) {
     if (isBahasaLanguage(language)) {
@@ -732,6 +760,18 @@ function buildClinicianAttemptedResponse(
     }
 
     return 'Please arrange review this week if the headaches keep recurring, and seek urgent help sooner if you develop vomiting, weakness, or vision changes.';
+  }
+
+  if (
+    fertilityContext &&
+    (/\b(biopsy|biopsi|procedure|prosedur)\b/i.test(normalizedQuestion) ||
+      /\b(biopsy|biopsi|procedure|prosedur)\b/i.test(primaryContext))
+  ) {
+    if (isBahasaLanguage(language)) {
+      return 'Biopsi biasanya tidak langsung mengubah rencana program fertilitas Anda, tetapi waktunya bisa perlu disesuaikan tergantung lokasi biopsi, obat yang dipakai, dan apakah ada perdarahan atau tindakan lanjutan. Tolong kirim jadwal treatment fertilitas serta obat yang sedang dipakai supaya kami bisa bantu selaraskan waktunya dengan aman.';
+    }
+
+    return 'A biopsy does not always change the fertility plan itself, but the timing sometimes needs adjusting depending on the biopsy site, medicines used, and whether there is bleeding or follow-up treatment. Please send your fertility treatment dates and current medication list so we can help coordinate the timing safely.';
   }
 
   if (/\b(biopsy|biopsi|procedure|prosedur)\b/i.test(normalizedQuestion) || /\b(biopsy|biopsi|procedure|prosedur)\b/i.test(primaryContext)) {
@@ -819,8 +859,9 @@ function ensureClinicianDraftStructure(
   contextSnapshot: MemoryTag[],
   language: string
 ): string {
+  const deHandoffDraft = stripGenericClinicianHandoffSentences(draft.trim());
   const cleanedDraft = trimToSentenceCount(
-    draft.trim(),
+    deHandoffDraft,
     3
   );
   const attemptedResponse = buildClinicianAttemptedResponse(question, contextSnapshot, language);
@@ -829,7 +870,7 @@ function ensureClinicianDraftStructure(
       cleanedDraft
     );
   const soundsLikeBareHandoff =
-    /\b(team|care team|review|confirm the safest plan)\b/i.test(cleanedDraft) && !soundsActionable;
+    /\b(team|care team|review|confirm the safest plan)\b/i.test(cleanedDraft);
   const body = cleanedDraft
     ? soundsActionable && !soundsLikeBareHandoff
       ? cleanedDraft
