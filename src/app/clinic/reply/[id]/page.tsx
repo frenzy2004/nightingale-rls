@@ -19,13 +19,18 @@ interface DraftResponse {
   sources: GroundingSource[];
 }
 
-async function requestDraft(question: string, contextSnapshot: unknown): Promise<DraftResponse> {
+async function requestDraft(
+  question: string,
+  contextSnapshot: unknown,
+  preferredLanguage?: string | null
+): Promise<DraftResponse> {
   const response = await fetch('/api/reply/draft', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       question,
       contextSnapshot,
+      preferredLanguage,
     }),
   });
 
@@ -88,10 +93,20 @@ export default function ReplyPage({ params }: PageProps) {
         setEscalation(esc);
         setDraftLoading(true);
 
-        const [draftResult, patientResponse] = await Promise.all([
-          requestDraft(esc.patient_edited_question, esc.context_snapshot),
-          fetch(`/api/patients/${esc.patient_id}`),
-        ]);
+        const patientResponse = await fetch(`/api/patients/${esc.patient_id}`);
+        let profile: PatientProfile | null = null;
+
+        if (patientResponse.ok) {
+          const patientData = await patientResponse.json();
+          profile = (patientData.profile || null) as PatientProfile | null;
+          setPatientProfile(profile);
+        }
+
+        const draftResult = await requestDraft(
+          esc.patient_edited_question,
+          esc.context_snapshot,
+          profile?.preferred_language || null
+        );
 
         if (esc.status === 'pending') {
           await createClient().from('escalations').update({ status: 'in_progress' }).eq('id', id);
@@ -100,11 +115,6 @@ export default function ReplyPage({ params }: PageProps) {
         setAiDraft(draftResult.draft);
         setDraftSources(draftResult.sources);
         setDraftGrounded(draftResult.groundedBySearch);
-
-        if (patientResponse.ok) {
-          const patientData = await patientResponse.json();
-          setPatientProfile((patientData.profile || null) as PatientProfile | null);
-        }
       } catch (error) {
         console.error('Error fetching escalation:', error);
         router.push('/clinic/triage');
@@ -126,7 +136,8 @@ export default function ReplyPage({ params }: PageProps) {
     try {
       const draftResult = await requestDraft(
         escalation.patient_edited_question,
-        escalation.context_snapshot
+        escalation.context_snapshot,
+        patientProfile?.preferred_language || null
       );
       setAiDraft(draftResult.draft);
       setDraftSources(draftResult.sources);

@@ -40,42 +40,59 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = await createServiceClient();
+    const requestMemoryTags = (memoryTags as MemoryTag[]) || [];
 
-    const { data: existingMessages } = await supabase
-      .from('messages')
-      .select('sender, content')
-      .eq('conversation_id', conversationId)
-      .order('created_at', { ascending: true });
+    const [messagesResult, tagsResult, profileResult] = await Promise.all([
+      supabase
+        .from('messages')
+        .select('sender, content')
+        .eq('conversation_id', conversationId)
+        .order('created_at', { ascending: true }),
+      supabase
+        .from('memory_tags')
+        .select('*')
+        .eq('user_id', userId)
+        .in('status', ['active', 'flagged', 'stopped']),
+      supabase
+        .from('patient_profiles')
+        .select('preferred_language')
+        .eq('user_id', userId)
+        .maybeSingle(),
+    ]);
 
-    const conversationHistory = (existingMessages || []).map((item) => ({
+    const conversationHistory = (messagesResult.data || []).map((item) => ({
       role: item.sender === 'patient' ? ('user' as const) : ('model' as const),
       content: item.content,
     }));
-
-    const { data: existingTags } = await supabase
-      .from('memory_tags')
-      .select('*')
-      .eq('user_id', userId)
-      .in('status', ['active', 'flagged', 'stopped']);
+    const existingTags = (tagsResult.data as MemoryTag[] | null) || [];
+    const effectiveMemoryTags = Array.from(
+      new Map(
+        [...existingTags, ...requestMemoryTags].map((tag) => [tag.id, tag])
+      ).values()
+    );
+    const preferredLanguage = profileResult.data?.preferred_language || null;
 
     const aiResponse = audioBase64
       ? await generateVoiceChatResponse(
           audioBase64,
           conversationHistory,
-          (memoryTags as MemoryTag[]) || [],
-          transcriptHint || message || ''
+          effectiveMemoryTags,
+          transcriptHint || message || '',
+          preferredLanguage
         )
       : imageDataUrl
       ? await generateImageChatResponse(
           imageDataUrl,
           promptOverride || message || '',
           conversationHistory,
-          (memoryTags as MemoryTag[]) || []
+          effectiveMemoryTags,
+          preferredLanguage
         )
       : await generateChatResponse(
           promptOverride || message,
           conversationHistory,
-          (memoryTags as MemoryTag[]) || []
+          effectiveMemoryTags,
+          preferredLanguage
         );
 
     const patientMessageId = uuidv4();
@@ -164,10 +181,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    const contradictions = detectContradictions(
-      aiResponse.extractedTags,
-      (existingTags as MemoryTag[]) || []
-    );
+    const contradictions = detectContradictions(aiResponse.extractedTags, existingTags);
 
     const newTags: MemoryTag[] = [];
     for (const tag of aiResponse.extractedTags) {
@@ -220,10 +234,10 @@ export async function POST(request: NextRequest) {
     ];
 
     if (updatedMessages.filter((item) => item.sender === 'patient').length >= 2) {
-      aiSummary = await generateTriageSummary(updatedMessages, (memoryTags as MemoryTag[]) || []);
+      aiSummary = await generateTriageSummary(updatedMessages, effectiveMemoryTags);
     }
 
-    const relevantTags = [...newTags, ...(((memoryTags as MemoryTag[]) || []) as MemoryTag[])]
+    const relevantTags = [...newTags, ...effectiveMemoryTags]
       .filter((tag) => tag.status === 'active' || tag.status === 'flagged')
       .slice(0, 10);
 

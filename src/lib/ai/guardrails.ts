@@ -20,12 +20,19 @@ const MEDICAL_ADVICE_PATTERNS = [
 
 const EMERGENCY_KEYWORDS = [
   'chest pain',
+  'nyeri dada',
   'can\'t breathe',
+  'cannot breathe',
+  'sesak napas',
+  'sulit bernapas',
   'severe bleeding',
+  'perdarahan hebat',
   'stroke',
   'heart attack',
   'unconscious',
+  'tidak sadar',
   'seizure',
+  'kejang',
   'overdose',
   'suicidal',
   'self-harm',
@@ -36,31 +43,50 @@ const EMERGENCY_KEYWORDS = [
 const HIGH_RISK_KEYWORDS = [
   'shortness of breath',
   'breathless',
+  'sesak napas',
+  'sulit bernapas',
   'lump',
+  'benjolan',
   'faint',
   'fainted',
+  'pingsan',
   'vomiting',
+  'muntah',
   'vision loss',
   'weakness',
+  'lemah mendadak',
   'bleeding',
+  'muntah darah',
+  'batuk darah',
   'coughing blood',
   'black stool',
+  'tinja hitam',
   'severe headache',
+  'sakit kepala berat',
   'confused',
+  'bingung',
   'seizure',
+  'kejang',
 ];
 
 const MODERATE_RISK_KEYWORDS = [
   'biopsy',
+  'biopsi',
   'chemotherapy',
   'infusion',
   'nausea',
+  'mual',
   'dizzy',
+  'pusing',
   'swelling',
+  'bengkak',
   'pain getting worse',
   'worsening',
+  'makin parah',
   'fever',
+  'demam',
   'infection',
+  'infeksi',
 ];
 
 const PROACTIVE_ESCALATION_KEYWORDS = ['fever', 'infection'];
@@ -189,6 +215,28 @@ export function addUncertaintyMarkers(content: string): string {
 }
 
 export function getEmergencyResponse(): string {
+  return getEmergencyResponseForLanguage('en');
+}
+
+function isBahasaLanguage(language?: string | null): boolean {
+  return language?.toLowerCase().startsWith('id') || language?.toLowerCase().includes('bahasa') || false;
+}
+
+export function getSafetyLimitResponse(language = 'en'): string {
+  if (isBahasaLanguage(language)) {
+    return 'Saya tidak bisa membantu dengan permintaan itu. Jika Anda punya pertanyaan kesehatan, saya bisa membantu dengan informasi yang lebih aman.';
+  }
+
+  return "I'm not able to help with that request. If you have health-related questions, I'm here to assist.";
+}
+
+export function getEmergencyResponseForLanguage(language = 'en'): string {
+  if (isBahasaLanguage(language)) {
+    return `Ini terdengar gawat. Segera pergi ke unit gawat darurat terdekat atau hubungi ${DEMO_PROVIDER.emergencyPhone} sekarang.
+
+Jika Anda menuju ${DEMO_PROVIDER.hospitalName}, bawa daftar obat yang sedang Anda konsumsi.`;
+  }
+
   return `This sounds urgent. Please go to the nearest emergency department now or dial ${DEMO_PROVIDER.emergencyPhone} for emergency help.
 
 If you are heading to ${DEMO_PROVIDER.hospitalName}, bring any medication list with you.`;

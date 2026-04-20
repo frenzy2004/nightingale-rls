@@ -52,16 +52,25 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { data: messages } = await supabase
-      .from('messages')
-      .select('sender, content')
-      .eq('conversation_id', conversationId)
-      .order('created_at', { ascending: true });
-
-    const { data: allTags } = await supabase
-      .from('memory_tags')
-      .select('*')
-      .eq('user_id', userId);
+    const [messagesResult, tagsResult, profileResult] = await Promise.all([
+      supabase
+        .from('messages')
+        .select('sender, content')
+        .eq('conversation_id', conversationId)
+        .order('created_at', { ascending: true }),
+      supabase
+        .from('memory_tags')
+        .select('*')
+        .eq('user_id', userId),
+      supabase
+        .from('patient_profiles')
+        .select('preferred_language')
+        .eq('user_id', userId)
+        .maybeSingle(),
+    ]);
+    const messages = messagesResult.data;
+    const allTags = tagsResult.data;
+    const preferredLanguage = profileResult.data?.preferred_language || null;
 
     const relevantTags = getRelevantTagsForEscalation(
       allTags || [],
@@ -126,7 +135,8 @@ export async function POST(request: NextRequest) {
 
     const aiDraft = await generateClinicianDraft(
       patientEditedQuestion,
-      (contextSnapshot as MemoryTag[]) || relevantTags
+      (contextSnapshot as MemoryTag[]) || relevantTags,
+      preferredLanguage
     );
 
     return NextResponse.json({

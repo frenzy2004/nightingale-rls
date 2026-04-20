@@ -77,29 +77,27 @@ Include:
 
 Keep it clinical, readable, and ready for triage queue display.`;
 
-export const CLINICIAN_DRAFT_OPENING =
-  "Thanks for checking in. Based on what you've shared, I would like our team to review this and confirm the safest next step.";
-
 export const CLINICIAN_DRAFT_PROMPT = `Based on this patient question and context, draft a short response that a clinician at ${DEMO_PROVIDER.hospitalName} might send.
 
 Guidelines:
-- Start with this exact sentence: "${CLINICIAN_DRAFT_OPENING}"
-- After that opener, add 1 or 2 short sentences that attempt to answer the patient's question in a useful way
-- Be professional, direct, and calm
-- Address the specific question
-- If the patient wrote in another language, draft in that same language
-- Include safe next-step guidance
+- Sound like a real clinician replying in chat, not a ticket handoff or call-center template
+- Address the specific question in the first sentence
+- If the patient wrote in another language or clearly prefers another language, draft in that same language
+- Use patient context and any clinician evidence sources to make the reply more specific
+- Include safe next-step guidance or practical reassurance when it is appropriate
 - Keep it concise (3 sentences max)
-- Mention urgent review only if the context actually sounds higher risk
-- Avoid vague placeholders like "noted context" unless you add a concrete next step
-- If clinician evidence sources are provided, use them to make the draft more specific without sounding like a literature review
+- Mention clinician or team review only if the situation sounds higher risk, the evidence is incomplete, or the final plan depends on examination/tests
+- Avoid vague placeholders like "the team will review" unless you also say what the patient should do now
+- If clinician evidence sources are provided, use them to make the draft more specific without sounding like a literature review or journal abstract
 - The clinician will edit this before sending
 
 Remember: This is a draft that will be reviewed and edited by the actual clinician.`;
 
 export function detectLanguage(text: string): string {
   const languagePatterns: Record<string, RegExp[]> = {
-    id: [/\b(halo|terima kasih|tolong|saya|tidak|apa(kah)?|bagaimana|demam|nyeri|obat|ubat|dokter|rumah sakit|bahasa|besok|malam|sendiri)\b/i],
+    id: [
+      /\b(halo|hai|terima kasih|tolong|saya|aku|tidak|tak|apa(kah)?|bagaimana|kenapa|kapan|sudah|belum|demam|nyeri|sakit|obat|ubat|dokter|rumah sakit|bahasa|besok|malam|sendiri|sesak|napas|batuk|minum|makan|perlu|boleh(kah)?|gimana|gak|nggak|darah|dada)\b/i,
+    ],
     es: [/\b(hola|gracias|por favor|tengo|dolor|medico)\b/i],
     fr: [/\b(bonjour|merci|s'il vous plait|j'ai|douleur|medecin)\b/i],
     de: [/\b(hallo|danke|bitte|ich habe|schmerz|arzt)\b/i],

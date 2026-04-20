@@ -183,8 +183,7 @@ async function runGroundingSearch({
       contents: {
         highlights: {
           query: highlightQuery,
-          numSentences: 2,
-          highlightsPerUrl: 2,
+          maxCharacters: 900,
         },
       },
     }),

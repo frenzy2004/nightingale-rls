@@ -11,6 +11,17 @@ interface MessageAudioButtonProps {
   className?: string;
 }
 
+function isAutoplayBlockedError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  return (
+    error.name === 'NotAllowedError' ||
+    /not allowed by the user agent|denied permission|play\(\) failed/i.test(error.message)
+  );
+}
+
 export function MessageAudioButton({
   text,
   language,
@@ -77,7 +88,7 @@ export function MessageAudioButton({
     }
   }, [language, text]);
 
-  const playAudio = useCallback(async () => {
+  const playAudio = useCallback(async (options?: { isAutoPlay?: boolean }) => {
     try {
       const sourceUrl = audioUrl || (await fetchAudio());
       if (!sourceUrl) {
@@ -97,6 +108,13 @@ export function MessageAudioButton({
       setErrorMessage(null);
     } catch (error) {
       console.error('Audio playback failed:', error);
+
+      if (options?.isAutoPlay && isAutoplayBlockedError(error)) {
+        setErrorMessage(null);
+        setIsPlaying(false);
+        return;
+      }
+
       setErrorMessage(
         error instanceof Error ? error.message : 'Audio unavailable'
       );
@@ -110,7 +128,7 @@ export function MessageAudioButton({
     }
 
     autoPlayTriggeredRef.current = true;
-    void playAudio();
+    void playAudio({ isAutoPlay: true });
   }, [playAudio, shouldAutoPlay]);
 
   const handleClick = async () => {

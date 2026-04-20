@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { startTransition, useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useUser } from '@/hooks/useUser';
 import { useChat } from '@/hooks/useChat';
@@ -85,7 +85,9 @@ export default function ChatPage() {
     }
 
     lastPlayableMessageIdRef.current = latestPlayableMessage.id;
-    setAutoPlayMessageId(latestPlayableMessage.id);
+    startTransition(() => {
+      setAutoPlayMessageId(latestPlayableMessage.id);
+    });
   }, [initialLoading, messages]);
 
   useEffect(() => {
@@ -232,6 +234,7 @@ export default function ChatPage() {
             <EscalationPrompt
               onAccept={handleEscalationAccept}
               onDismiss={dismissEscalation}
+              riskAssessment={pendingEscalation?.riskAssessment || riskAssessment}
             />
           )}
 

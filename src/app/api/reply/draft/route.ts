@@ -5,7 +5,7 @@ import type { MemoryTag } from '@/types';
 
 export async function POST(request: NextRequest) {
   try {
-    const { question, contextSnapshot } = await request.json();
+    const { question, contextSnapshot, preferredLanguage } = await request.json();
 
     if (!question) {
       return NextResponse.json(
@@ -39,7 +39,8 @@ export async function POST(request: NextRequest) {
 
     const draftResult = await generateClinicianDraft(
       question,
-      contextSnapshot as MemoryTag[] || []
+      contextSnapshot as MemoryTag[] || [],
+      preferredLanguage || null
     );
 
     return NextResponse.json(draftResult);

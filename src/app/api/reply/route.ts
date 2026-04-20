@@ -8,6 +8,7 @@ import {
 import { extractTags } from '@/lib/ai/openai-realtime';
 import { detectContradictions } from '@/lib/ai/tag-extractor';
 import { buildProviderMessageMetadata } from '@/lib/demo';
+import { detectLanguage } from '@/lib/ai/prompts';
 import { v4 as uuidv4 } from 'uuid';
 import type { Clinic, DiffEntry, MemoryTag, MessageMetadata, MessageType } from '@/types';
 
@@ -128,7 +129,7 @@ export async function POST(request: NextRequest) {
         content: finalReply,
         sender: 'clinician',
         authority: 'clinician_verified',
-        language: null,
+        language: detectLanguage(finalReply),
         message_type: messageType as MessageType,
         metadata: messageMetadata,
       });
