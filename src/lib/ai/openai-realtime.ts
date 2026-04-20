@@ -545,6 +545,104 @@ function isDataSummaryRequest(message: string): boolean {
   );
 }
 
+function buildRecentPatientContextText(
+  userMessage: string,
+  conversationHistory: ConversationEntry[],
+  memoryTags: MemoryTag[]
+): string {
+  const recentHistory = conversationHistory
+    .filter((entry) => entry.role === 'user')
+    .slice(-4)
+    .map((entry) => entry.content);
+  const recentTags = memoryTags
+    .filter((tag) => tag.status === 'active' || tag.status === 'flagged')
+    .slice(0, 8)
+    .map((tag) => tag.value);
+
+  return [userMessage, ...recentHistory, ...recentTags].join(' ').toLowerCase();
+}
+
+function hasFertilityContext(text: string): boolean {
+  return /\b(fertility|ivf|egg|embryo|ovarian|sperm|pregnan|conceiv|reproductive|iui)\b/i.test(
+    text
+  );
+}
+
+function hasSpecificFertilityTreatmentDetail(text: string): boolean {
+  return /\b(ivf|iui|egg retrieval|embryo transfer|frozen embryo transfer|fet|ovarian stimulation|stimulation|trigger shot|fertility injections|gonal|menopur|clomid|letrozole)\b/i.test(
+    text
+  );
+}
+
+function isCareCoordinationQuestion(text: string): boolean {
+  return /\b(affect|affected|impact|impacted|change|delay|postpone|timing|schedule|scheduled|continue|pause|stop|still do|still have|need to move|interfere|safe to proceed|okay to proceed|still come|influenc|coordina|selaraskan|pengaruh|terdampak|ubah|tunda|jadwal|lanjut|hentikan)\b/i.test(
+    text
+  );
+}
+
+function getCareCoordinationFlow(
+  userMessage: string,
+  conversationHistory: ConversationEntry[],
+  memoryTags: MemoryTag[],
+  riskAssessment: RiskAssessment,
+  preferredLanguage?: string | null
+): Pick<ChatResponse, 'content' | 'language' | 'riskAssessment' | 'shouldEscalate'> | null {
+  if (riskAssessment.emergency || riskAssessment.level === 'high') {
+    return null;
+  }
+
+  const normalizedMessage = userMessage.toLowerCase();
+  const combinedContext = buildRecentPatientContextText(
+    userMessage,
+    conversationHistory,
+    memoryTags
+  );
+  const mentionsBiopsy = /\b(biopsy|biopsi|procedure|prosedur)\b/i.test(combinedContext);
+
+  if (!mentionsBiopsy || !isCareCoordinationQuestion(normalizedMessage)) {
+    return null;
+  }
+
+  const language = resolveResponseLanguage(
+    userMessage,
+    conversationHistory,
+    memoryTags,
+    preferredLanguage
+  );
+  const mentionsFertility = hasFertilityContext(combinedContext);
+
+  if (mentionsFertility && !hasSpecificFertilityTreatmentDetail(combinedContext)) {
+    return {
+      content: isBahasaLanguage(language)
+        ? 'Bisa jadi waktunya perlu diselaraskan, bukan otomatis harus dihentikan. Jenis treatment fertilitas apa yang sedang Anda jalani sekarang, dan kapan langkah berikutnya dijadwalkan?'
+        : 'It may need timing coordination rather than an automatic stop. What kind of fertility treatment are you having right now, and when is the next step scheduled?',
+      language,
+      riskAssessment,
+      shouldEscalate: false,
+    };
+  }
+
+  if (mentionsFertility) {
+    return {
+      content: isBahasaLanguage(language)
+        ? 'Biopsi biasanya tidak langsung menghentikan program fertilitas, tetapi waktunya kadang perlu disesuaikan tergantung lokasi biopsi, obat yang dipakai, dan apakah ada perdarahan atau tindakan lanjutan. Jika Anda beri tahu jadwal treatment fertilitas dan tanggal biopsinya, saya bisa bantu jelaskan apa yang biasanya perlu dicek agar kedua jadwal itu tetap aman.'
+        : 'A biopsy does not automatically stop fertility treatment, but the timing sometimes needs adjusting depending on the biopsy site, medicines used, and whether there is bleeding or follow-up treatment. If you share your fertility treatment schedule and biopsy date, I can help narrow what usually needs checking to keep both plans safe.',
+      language,
+      riskAssessment,
+      shouldEscalate: false,
+    };
+  }
+
+  return {
+    content: isBahasaLanguage(language)
+      ? 'Biopsi tidak selalu mengubah rencana treatment lain, tetapi waktunya kadang perlu disesuaikan tergantung jenis tindakan, obat yang dipakai, dan apakah ada perdarahan atau pemulihan khusus. Kalau Anda beri tahu treatment atau obat mana yang Anda maksud, saya bisa bantu jawab lebih spesifik.'
+      : 'A biopsy does not always change another treatment plan, but the timing sometimes needs adjusting depending on the procedure, medicines involved, and whether there is bleeding or extra recovery afterward. If you tell me which treatment or medicine you mean, I can answer more specifically.',
+    language,
+    riskAssessment,
+    shouldEscalate: false,
+  };
+}
+
 function buildKnownDataResponse(memoryTags: MemoryTag[], language: string): string {
   const relevantTags = memoryTags
     .filter((tag) => tag.status === 'active' || tag.status === 'flagged')
@@ -1320,6 +1418,28 @@ export async function generateChatResponse(
       shouldEscalate: false,
     };
   }
+
+  const careCoordinationFlow = getCareCoordinationFlow(
+    userMessage,
+    conversationHistory,
+    memoryTags,
+    riskAssessment,
+    preferredLanguage
+  );
+
+  if (careCoordinationFlow) {
+    const extractedTags = await extractTags(userMessage);
+
+    return {
+      content: validateResponse(careCoordinationFlow.content),
+      language: careCoordinationFlow.language,
+      isEmergency: false,
+      extractedTags,
+      riskAssessment: careCoordinationFlow.riskAssessment,
+      shouldEscalate: false,
+    };
+  }
+
   let groundingResult = null;
 
   try {
@@ -1479,15 +1599,15 @@ export async function generateVoiceChatResponse(
     });
 
     const transcript = (realtimeResponse.transcript || preliminaryTranscript).trim();
-    const riskAssessment = transcript
-      ? assessMedicalRisk(transcript)
-      : buildLowRiskAssessment();
     const transcriptLanguage = resolveResponseLanguage(
       transcript,
       conversationHistory,
       memoryTags,
       preferredLanguage || language
     );
+    const transcriptRiskAssessment = transcript
+      ? assessMedicalRisk(transcript)
+      : buildLowRiskAssessment();
 
     if (checkInputSafety(transcript).reason === 'emergency_detected') {
       return {
@@ -1495,14 +1615,34 @@ export async function generateVoiceChatResponse(
         language: transcriptLanguage,
         isEmergency: true,
         extractedTags: transcript ? await extractTags(transcript) : [],
-        riskAssessment,
+        riskAssessment: transcriptRiskAssessment,
         shouldEscalate: true,
         transcript,
       };
     }
 
+    const careCoordinationFlow = getCareCoordinationFlow(
+      transcript,
+      conversationHistory,
+      memoryTags,
+      transcriptRiskAssessment,
+      preferredLanguage || language
+    );
+
+    if (careCoordinationFlow) {
+      return {
+        content: validateResponse(careCoordinationFlow.content),
+        language: careCoordinationFlow.language,
+        isEmergency: false,
+        extractedTags: transcript ? await extractTags(transcript) : [],
+        riskAssessment: careCoordinationFlow.riskAssessment,
+        shouldEscalate: false,
+        transcript,
+      };
+    }
+
     const responseWithEscalationHint =
-      riskAssessment.level === 'high' &&
+      transcriptRiskAssessment.level === 'high' &&
       !/care team|clinic|dr alan|sjmc|tim|dokter|rumah sakit|klinik/i.test(realtimeResponse.text)
         ? `${realtimeResponse.text} ${buildCareTeamEscalationHint(transcriptLanguage)}`
         : realtimeResponse.text;
@@ -1510,9 +1650,9 @@ export async function generateVoiceChatResponse(
     const preferredResponse = shouldReplaceWithConversationalFallback(
       responseWithEscalationHint,
       transcript,
-      riskAssessment
+      transcriptRiskAssessment
     )
-      ? buildFallbackChatResponse(transcript, riskAssessment, transcriptLanguage)
+      ? buildFallbackChatResponse(transcript, transcriptRiskAssessment, transcriptLanguage)
       : responseWithEscalationHint;
 
     return {
@@ -1520,8 +1660,8 @@ export async function generateVoiceChatResponse(
       language: transcriptLanguage,
       isEmergency: false,
       extractedTags: transcript ? await extractTags(transcript) : [],
-      riskAssessment,
-      shouldEscalate: riskAssessment.escalationRecommended,
+      riskAssessment: transcriptRiskAssessment,
+      shouldEscalate: transcriptRiskAssessment.escalationRecommended,
       transcript,
       sources:
         groundingResult?.sources.map((source) => ({

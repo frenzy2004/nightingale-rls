@@ -113,6 +113,41 @@ describe('ai behavior', () => {
     expect(draft.draft.toLowerCase()).toMatch(/fertility|timing|medication|treatment/);
   });
 
+  it('asks one targeted fertility follow-up instead of escalating immediately', async () => {
+    const response = await generateChatResponse(
+      'How does my fertility treatment get impacted by the biopsy?',
+      [],
+      [makeMemoryTag({ value: 'Biopsy planned tomorrow' })],
+      null
+    );
+
+    expect(response.shouldEscalate).toBe(false);
+    expect(response.content.toLowerCase()).toContain('what kind of fertility treatment');
+    expect(response.content.toLowerCase()).toContain('scheduled');
+    expect(response.content.toLowerCase()).not.toContain('care team');
+  });
+
+  it('answers fertility-biopsy coordination questions directly when context already includes the treatment type', async () => {
+    const response = await generateChatResponse(
+      'How does my fertility treatment get impacted by the biopsy?',
+      [{ role: 'user', content: 'I am in the middle of IVF stimulation and my egg retrieval is next week.' }],
+      [
+        makeMemoryTag({ value: 'Biopsy planned tomorrow' }),
+        makeMemoryTag({
+          id: 'fertility-1',
+          value: 'Currently on IVF stimulation with egg retrieval planned next week',
+          tags: ['#treatment'],
+        }),
+      ],
+      null
+    );
+
+    expect(response.shouldEscalate).toBe(false);
+    expect(response.content.toLowerCase()).toContain('does not automatically stop fertility treatment');
+    expect(response.content.toLowerCase()).toContain('timing');
+    expect(response.content.toLowerCase()).not.toContain('care team');
+  });
+
   it('shows the continue chatting action alongside emergency escalation copy', () => {
     render(
       <EscalationPrompt
